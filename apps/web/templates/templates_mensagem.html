@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Templates de mensagem — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Templates de cadência (seção 8)</h1>
+<p class="page-sub">Exemplo renderizado com dados fictícios + resultado do lint automático de compliance de conteúdo (seção 6.4).</p>
+
+{% for step, ex in examples.items() %}
+<div class="card section">
+  <h3>{{ step }}</h3>
+  <p class="small muted">Template bruto:</p>
+  <div class="msg-box small">{{ ex.template }}</div>
+  <p class="small muted" style="margin-top:10px">Renderizado:</p>
+  <div class="msg-box">{{ ex.rendered }}</div>
+  <p style="margin-top:8px">
+    {% if ex.lint.ok %}
+      <span class="pill" style="background:#e2f2e6;color:#1f6f3c">✓ aprovado pelo lint</span>
+    {% else %}
+      <span class="pill" style="background:#fbeae5;color:#b3432b">✗ reprovado: {{ ex.lint.problems|join(', ') }}</span>
+    {% endif %}
+  </p>
+</div>
+{% endfor %}
+{% endblock %}

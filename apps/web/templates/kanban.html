@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Kanban — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Kanban comercial</h1>
+<p class="page-sub">23 estágios — seção 12D. Arraste é manual por enquanto: use o botão "Mover" em cada card.</p>
+
+<div class="kanban">
+  {% for col in board %}
+  <div class="kanban-col">
+    <h4>{{ col.stage.name }} ({{ col.deals|length }})</h4>
+    {% for d in col.deals %}
+    <div class="kanban-card">
+      <div class="name"><a href="{{ url_for('lead_detail', company_id=d.company_id) }}">{{ d.trade_name }}</a></div>
+      <div class="muted">{{ d.city }}/{{ d.state }}</div>
+      {% if d.potential %}<span class="badge {{ d.potential }}">{{ d.potential }}</span>{% endif %}
+      <div class="muted">{{ d.value_proposed_cents|brl }}</div>
+      <form method="post" action="{{ url_for('kanban_move') }}" style="margin-top:6px">
+        <input type="hidden" name="deal_id" value="{{ d.deal_id }}">
+        <select name="new_stage_code" class="small">
+          {% for opt in board %}
+            <option value="{{ opt.stage.code }}" {% if opt.stage.id == col.stage.id %}selected{% endif %}>{{ opt.stage.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn small secondary" type="submit">Mover</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

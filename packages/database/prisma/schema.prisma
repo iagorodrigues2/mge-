@@ -1,0 +1,901 @@
+// ============================================================================
+// Marketplace Growth Engine — Schema Prisma
+// CRM comercial para prospecção consultiva B2B (Iago Rodrigues)
+// Ver docs/arquitetura.md para decisões e docs/politica-dados.md para regras
+// de dados pessoais / LGPD.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Identidade e permissões
+// ----------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  CLOSER
+  SDR
+  VIEWER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      UserRole @default(SDR)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns       Campaign[]        @relation("CampaignOwner")
+  tasks           Task[]            @relation("TaskOwner")
+  outreachAttempts OutreachAttempt[] @relation("AttemptResponsible")
+  meetings        Meeting[]         @relation("MeetingOwner")
+  deals           Deal[]            @relation("DealOwner")
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  savedViews      SavedView[]
+  approvals       LeadApproval[]
+
+  @@map("users")
+}
+
+// ----------------------------------------------------------------------------
+// Segmentação e campanhas (Etapa 1 — seção 7 / 4.1)
+// ----------------------------------------------------------------------------
+
+model Segment {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  order       Int      @default(0)
+  description String?
+  active      Boolean  @default(true)
+
+  companies Company[]
+  campaigns Campaign[]
+
+  @@map("segments")
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+model Campaign {
+  id        String         @id @default(cuid())
+  name      String
+  segmentId String
+  segment   Segment        @relation(fields: [segmentId], references: [id])
+  ownerId   String
+  owner     User           @relation("CampaignOwner", fields: [ownerId], references: [id])
+
+  region          String?
+  cnaes           String[] @default([])
+  keywords        String[] @default([])
+  exclusions      String[] @default([])
+  offerId         String?
+  offer           ServicePackage? @relation(fields: [offerId], references: [id])
+
+  maxCompanies       Int      @default(100)
+  dailySearchLimit   Int      @default(20)
+  dailyOutreachLimit Int      @default(10)
+
+  startDate DateTime?
+  endDate   DateTime?
+  status    CampaignStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companies Company[]
+  budgets   CampaignBudget[]
+
+  @@map("campaigns")
+}
+
+model CampaignBudget {
+  id           String   @id @default(cuid())
+  campaignId   String
+  campaign     Campaign @relation(fields: [campaignId], references: [id])
+  date         DateTime
+  searchesUsed Int      @default(0)
+  outreachUsed Int      @default(0)
+
+  @@unique([campaignId, date])
+  @@map("campaign_budgets")
+}
+
+// ----------------------------------------------------------------------------
+// Empresas, contatos, fontes (Agente Scout — seção 6.1)
+// ----------------------------------------------------------------------------
+
+enum CompanyStatus {
+  FOUND
+  IN_AUDIT
+  QUALIFIED
+  PENDING_APPROVAL
+  APPROVED
+  CONTACTED
+  FOLLOW_UP
+  REPLIED
+  QUALIFYING
+  MEETING_SCHEDULED
+  MEETING_DONE
+  PROPOSAL_DRAFT
+  PROPOSAL_SENT
+  NEGOTIATION
+  CONTRACT_SENT
+  CONTRACT_SIGNED
+  AWAITING_PAYMENT
+  DOWN_PAYMENT_RECEIVED
+  WON_AND_PAID
+  ONBOARDING
+  NURTURE
+  LOST
+  BLOCKED
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  legalName     String
+  tradeName     String?
+  cnpj          String?  @unique
+  cnaePrimary   String?
+  cnaeSecondary String[] @default([])
+  city          String?
+  state         String?
+  website       String?
+  instagram     String?
+
+  publicBusinessEmail String?
+  publicBusinessPhone String?
+  catalogSummary       String?
+  estimatedSkuRangeMin Int?
+  estimatedSkuRangeMax Int?
+
+  segmentId  String?
+  segment    Segment?  @relation(fields: [segmentId], references: [id])
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+
+  status    CompanyStatus @default(FOUND)
+  blocked   Boolean       @default(false)
+  blockedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastValidatedAt DateTime?
+
+  contacts             Contact[]
+  sources               Source[]
+  marketplacePresences  MarketplacePresence[]
+  auditFindings         AuditFinding[]
+  leadScores             LeadScore[]
+  outreachMessages       OutreachMessage[]
+  outreachAttempts       OutreachAttempt[]
+  conversations           Conversation[]
+  tasks                   Task[]
+  meetings                Meeting[]
+  proposals               Proposal[]
+  contracts               Contract[]
+  deals                   Deal[]
+  qualifications           Qualification[]
+  optOuts                  OptOut[]
+  approvals                 LeadApproval[]
+  stageHistory              StageHistory[]
+  onboardingProjects         OnboardingProject[]
+
+  @@index([status])
+  @@index([segmentId])
+  @@map("companies")
+}
+
+model Contact {
+  id         String  @id @default(cuid())
+  companyId  String
+  company    Company @relation(fields: [companyId], references: [id])
+
+  name       String?
+  role       String?
+  email      String?
+  phone      String?
+  whatsapp   String?
+  linkedin   String?
+  sourceNote String?
+  confidence String? // alto | médio | baixo
+  hasBusinessContext Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@map("contacts")
+}
+
+model Source {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  type       String   // cnpj_publico | site | instagram | busca | maps | marketplace | fornecido_pelo_usuario
+  url        String?
+  note       String?
+  collectedAt DateTime @default(now())
+
+  @@map("sources")
+}
+
+// ----------------------------------------------------------------------------
+// Auditoria de marketplace (Agente Auditor — seção 6.2)
+// ----------------------------------------------------------------------------
+
+enum MarketplaceChannel {
+  MERCADO_LIVRE
+  AMAZON
+  SHOPEE
+  TIKTOK_SHOP
+}
+
+model MarketplacePresence {
+  id         String             @id @default(cuid())
+  companyId  String
+  company    Company            @relation(fields: [companyId], references: [id])
+  channel    MarketplaceChannel
+  present    Boolean            @default(false)
+  listingsCount Int?
+  reputationNote String?
+  priceAlignment String? // alinhado | acima | abaixo | desconhecido
+  evidenceUrl String?
+  confidence  String   // alto | médio | baixo
+  checkedAt   DateTime @default(now())
+
+  @@map("marketplace_presences")
+}
+
+model AuditFinding {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  category   String   // ausencia_canal | catalogo_incompleto | titulos_ruins | fotos_fracas | preco_desalinhado | sem_fulfillment | baixa_avaliacao | concorrente_dominando | risco_margem | outro
+  summary    String
+  evidenceUrl String?
+  confidence  String   // alto | médio | baixo
+  source      String?
+  createdAt   DateTime @default(now())
+
+  @@map("audit_findings")
+}
+
+// ----------------------------------------------------------------------------
+// Qualificação / Score (Agente de Qualificação — seção 6.3)
+// ----------------------------------------------------------------------------
+
+model LeadScore {
+  id                 String   @id @default(cuid())
+  companyId          String
+  company            Company  @relation(fields: [companyId], references: [id])
+
+  productFit         Int // 0-20
+  marketplaceGap     Int // 0-20
+  businessStructure  Int // 0-15
+  catalogQuality     Int // 0-15
+  investmentSignals  Int // 0-10
+  contactability     Int // 0-10
+  problemClarity     Int // 0-10
+  total              Int // 0-100
+
+  potential          String // A | B | C | NAO_ABORDAR
+  suggestedOfferId   String?
+  suggestedOffer     ServicePackage? @relation(fields: [suggestedOfferId], references: [id])
+
+  rationale          String
+  confidence         String // alto | médio | baixo
+  generatedAt        DateTime @default(now())
+
+  @@map("lead_scores")
+}
+
+model LeadApproval {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  decision   String   // aprovar | editar | rejeitar | espera | bloquear | nova_pesquisa
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@map("lead_approvals")
+}
+
+// ----------------------------------------------------------------------------
+// Mensagens e prospecção (Agentes Copywriter / SDR — seção 6.4/6.5)
+// ----------------------------------------------------------------------------
+
+model OutreachMessage {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  channel    String   // email | instagram | linkedin | whatsapp | formulario
+  step       String   // contato_inicial | followup_1 | followup_2 | encerramento
+  text       String
+  approved   Boolean  @default(false)
+  approvedBy String?
+  createdAt  DateTime @default(now())
+
+  attempts OutreachAttempt[]
+
+  @@map("outreach_messages")
+}
+
+enum AttemptStatus {
+  DRAFT
+  SENT
+  OPENED
+  REPLIED
+  BOUNCED
+  OPT_OUT
+}
+
+model OutreachAttempt {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  messageId  String?
+  message    OutreachMessage? @relation(fields: [messageId], references: [id])
+  channel    String
+  status     AttemptStatus @default(DRAFT)
+  responsibleId String
+  responsible   User @relation("AttemptResponsible", fields: [responsibleId], references: [id])
+  sentAt     DateTime?
+  nextFollowUpAt DateTime?
+  attemptNumber Int @default(1)
+  humanConfirmed Boolean @default(false) // exige clique humano (WhatsApp assistido)
+  createdAt  DateTime @default(now())
+
+  @@map("outreach_attempts")
+}
+
+model Conversation {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  channel    String
+  lastMessageAt DateTime?
+  status     String  @default("aberta")
+
+  replyClassifications ReplyClassification[]
+
+  @@map("conversations")
+}
+
+model ReplyClassification {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  classification String // interessado | pediu_informacao | pediu_diagnostico | pediu_preco | falar_depois | sem_prioridade | ja_tem_parceiro | sem_orcamento | nao_interessado | contato_errado | opt_out | reuniao_marcada
+  note           String?
+  classifiedAt   DateTime @default(now())
+
+  @@map("reply_classifications")
+}
+
+// ----------------------------------------------------------------------------
+// Tarefas, agenda, reuniões (Etapas 5/8/9/10 — seção 12A/12F)
+// ----------------------------------------------------------------------------
+
+enum TaskStatus {
+  PENDING
+  DONE
+  RESCHEDULED
+  CANCELLED
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  companyId   String?
+  company     Company?   @relation(fields: [companyId], references: [id])
+  dealId      String?
+  deal        Deal?      @relation(fields: [dealId], references: [id])
+  ownerId     String
+  owner       User       @relation("TaskOwner", fields: [ownerId], references: [id])
+  dueAt       DateTime
+  status      TaskStatus @default(PENDING)
+  cancelReason String?
+  createdAt   DateTime   @default(now())
+
+  @@index([dueAt, status])
+  @@map("tasks")
+}
+
+model FollowUpRule {
+  id          String @id @default(cuid())
+  step        String // followup_1 | followup_2 | encerramento
+  daysAfterPrevious Int
+  channel     String
+  active      Boolean @default(true)
+
+  @@map("follow_up_rules")
+}
+
+model CalendarEvent {
+  id         String   @id @default(cuid())
+  companyId  String?
+  title      String
+  startsAt   DateTime
+  endsAt     DateTime
+  meetingUrl String?
+  status     String   @default("confirmado") // confirmado | reagendado | cancelado | nao_compareceu
+
+  meeting Meeting?
+
+  @@map("calendar_events")
+}
+
+model Meeting {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  calendarEventId String? @unique
+  calendarEvent   CalendarEvent? @relation(fields: [calendarEventId], references: [id])
+  ownerId        String
+  owner          User     @relation("MeetingOwner", fields: [ownerId], references: [id])
+  type           String   @default("diagnostico") // diagnostico | kickoff | acompanhamento
+  attended       Boolean?
+  recordingAuthorized Boolean @default(false)
+
+  calls Call[]
+
+  @@map("meetings")
+}
+
+model Call {
+  id         String   @id @default(cuid())
+  meetingId  String
+  meeting    Meeting  @relation(fields: [meetingId], references: [id])
+  script     String?
+  decisionMakers String?
+  painPoints String?
+  impact     String?
+  urgency    String?
+  budget     String?
+  nextStep   String?
+  classification String?
+  createdAt  DateTime @default(now())
+
+  notes CallNote[]
+
+  @@map("calls")
+}
+
+model CallNote {
+  id        String   @id @default(cuid())
+  callId    String
+  call      Call     @relation(fields: [callId], references: [id])
+  note      String
+  createdAt DateTime @default(now())
+
+  @@map("call_notes")
+}
+
+model Qualification {
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  currentStage    String?
+  channels        String?
+  catalog         String?
+  revenueRange    String?
+  team            String?
+  erp             String?
+  inventory       String?
+  taxInvoice      Boolean?
+  priorityProblem String?
+  deadline        String?
+  budget          String?
+  decisionMakers  String?
+  offerFit        String?
+  recommendation  String // diagnostico | mentoria | implantacao | programa_anual | nutrir | desqualificar
+  createdAt       DateTime @default(now())
+
+  @@map("qualifications")
+}
+
+// ----------------------------------------------------------------------------
+// Ofertas, preços e descontos (seção 3 — versionado, nunca hard-coded)
+// ----------------------------------------------------------------------------
+
+model ServicePackage {
+  id          String   @id @default(cuid())
+  code        String   @unique // diagnostico | mentoria_90 | implantacao_90 | programa_anual
+  name        String
+  description String
+  active      Boolean  @default(true)
+
+  priceVersions PriceVersion[]
+  campaigns     Campaign[]
+  leadScores    LeadScore[]
+  proposals     Proposal[]
+
+  @@map("service_packages")
+}
+
+model PriceVersion {
+  id              String         @id @default(cuid())
+  packageId       String
+  package         ServicePackage @relation(fields: [packageId], references: [id])
+  priceCents      Int
+  currency        String         @default("BRL")
+  durationDays    Int?
+  validFrom       DateTime       @default(now())
+  validUntil      DateTime?
+  note            String?
+  isFounderOffer  Boolean        @default(false)
+  maxFounderSlots Int?
+
+  proposals ProposalVersion[]
+
+  @@map("price_versions")
+}
+
+model DiscountPolicy {
+  id            String   @id @default(cuid())
+  name          String
+  maxPercent    Int
+  requiresApproval Boolean @default(true)
+  active        Boolean  @default(true)
+
+  @@map("discount_policies")
+}
+
+// ----------------------------------------------------------------------------
+// Pipeline / Kanban / Deals (seção 12D)
+// ----------------------------------------------------------------------------
+
+model PipelineStage {
+  id    String @id @default(cuid())
+  code  String @unique
+  name  String
+  order Int    @unique
+
+  deals Deal[]
+
+  @@map("pipeline_stages")
+}
+
+model Deal {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  ownerId       String
+  owner         User     @relation("DealOwner", fields: [ownerId], references: [id])
+  stageId       String
+  stage         PipelineStage @relation(fields: [stageId], references: [id])
+  offerId       String?
+
+  valueProposedCents  Int?
+  valueContractedCents Int?
+  discountPercent      Int? @default(0)
+  discountReason        String?
+  discountApprovedBy    String?
+  probability            Int?    @default(0)
+  expectedCloseDate      DateTime?
+  lossReason              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks       Task[]
+  proposals   Proposal[]
+  contracts   Contract[]
+  activities  Activity[]
+  stageHistory StageHistory[]
+
+  @@map("deals")
+}
+
+model StageHistory {
+  id           String   @id @default(cuid())
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id])
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  userId       String?
+  fromStage    String?
+  toStage      String
+  reason       String?
+  nextAction   String?
+  changedAt    DateTime @default(now())
+
+  @@map("stage_history")
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id])
+  type      String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@map("activities")
+}
+
+model DailyAgenda {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  summaryJson Json?
+  generatedAt DateTime @default(now())
+
+  @@map("daily_agendas")
+}
+
+// ----------------------------------------------------------------------------
+// Propostas e contratos (Etapas 12/13)
+// ----------------------------------------------------------------------------
+
+enum ProposalStatus {
+  DRAFT
+  APPROVED
+  SENT
+  VIEWED
+  ACCEPTED
+  REVISION
+  LOST
+  EXPIRED
+}
+
+model Proposal {
+  id         String         @id @default(cuid())
+  companyId  String
+  company    Company        @relation(fields: [companyId], references: [id])
+  dealId     String?
+  deal       Deal?          @relation(fields: [dealId], references: [id])
+  offerId    String
+  offer      ServicePackage @relation(fields: [offerId], references: [id])
+  status     ProposalStatus @default(DRAFT)
+  validUntil DateTime?
+  createdAt  DateTime       @default(now())
+
+  versions ProposalVersion[]
+  contracts Contract[]
+
+  @@map("proposals")
+}
+
+model ProposalVersion {
+  id             String       @id @default(cuid())
+  proposalId     String
+  proposal       Proposal     @relation(fields: [proposalId], references: [id])
+  priceVersionId String?
+  priceVersion   PriceVersion? @relation(fields: [priceVersionId], references: [id])
+  finalPriceCents Int
+  discountPercent Int @default(0)
+  discountReason  String?
+  approvedBy      String?
+  scopeSummary    String
+  paymentTerms    String
+  fileUrl         String?
+  version         Int          @default(1)
+  createdAt       DateTime     @default(now())
+
+  @@map("proposal_versions")
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+model Contract {
+  id         String         @id @default(cuid())
+  companyId  String
+  company    Company        @relation(fields: [companyId], references: [id])
+  dealId     String?
+  deal       Deal?          @relation(fields: [dealId], references: [id])
+  proposalId String?
+  proposal   Proposal?      @relation(fields: [proposalId], references: [id])
+  status     ContractStatus @default(DRAFT)
+  fileUrl    String?
+  signedFileUrl String?
+  sentAt     DateTime?
+  signedAt   DateTime?
+  createdAt  DateTime       @default(now())
+
+  payments Payment[]
+
+  @@map("contracts")
+}
+
+// ----------------------------------------------------------------------------
+// Financeiro (Etapa 14 — seção 3.4)
+// ----------------------------------------------------------------------------
+
+enum PaymentMethod {
+  PIX
+  BOLETO
+  CARTAO
+  TRANSFERENCIA
+}
+
+enum PaymentStatus {
+  PENDING
+  RECEIVED
+  LATE
+  CANCELLED
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  contractId String
+  contract   Contract      @relation(fields: [contractId], references: [id])
+  method     PaymentMethod
+
+  installments Installment[]
+
+  @@map("payments")
+}
+
+model Installment {
+  id          String        @id @default(cuid())
+  paymentId   String
+  payment     Payment       @relation(fields: [paymentId], references: [id])
+  seq         Int
+  amountCents Int
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  paidAt      DateTime?
+
+  proofs PaymentProof[]
+  revenueEvents RevenueEvent[]
+
+  @@map("installments")
+}
+
+model PaymentProof {
+  id            String      @id @default(cuid())
+  installmentId String
+  installment   Installment @relation(fields: [installmentId], references: [id])
+  fileUrl       String
+  uploadedAt    DateTime    @default(now())
+
+  @@map("payment_proofs")
+}
+
+// Receita só entra como "ganha e recebida" após confirmação do 1º pagamento (seção 3.5 / 12H)
+model RevenueEvent {
+  id            String   @id @default(cuid())
+  installmentId String?
+  installment   Installment? @relation(fields: [installmentId], references: [id])
+  companyId     String
+  type          String   // entrada_recebida | parcela_recebida | cancelamento | inadimplencia
+  amountCents   Int
+  occurredAt    DateTime @default(now())
+
+  @@map("revenue_events")
+}
+
+model OnboardingProject {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  kickoffAt   DateTime?
+  accessChecklistJson Json?
+  schedule    String?
+  createdAt   DateTime @default(now())
+
+  @@map("onboarding_projects")
+}
+
+// ----------------------------------------------------------------------------
+// Compliance, opt-out, auditoria (Agente de Compliance — seção 6.7 / 14)
+// ----------------------------------------------------------------------------
+
+model OptOut {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  contactValue String // email ou telefone que pediu opt-out
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("opt_outs")
+}
+
+model Blocklist {
+  id        String   @id @default(cuid())
+  type      String   // cnpj | dominio | telefone | email | grupo_economico
+  value     String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@unique([type, value])
+  @@map("blocklist")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  entity    String
+  entityId  String
+  action    String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+// ----------------------------------------------------------------------------
+// Suporte operacional
+// ----------------------------------------------------------------------------
+
+model DataExport {
+  id         String   @id @default(cuid())
+  type       String   // xlsx | csv
+  fileUrl    String?
+  requestedBy String?
+  createdAt  DateTime @default(now())
+
+  @@map("data_exports")
+}
+
+model SavedView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  entity    String   // company | deal
+  filtersJson Json
+  createdAt DateTime @default(now())
+
+  @@map("saved_views")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model IntegrationCredential {
+  id         String   @id @default(cuid())
+  provider   String   // google_calendar | whatsapp_business_api | payment_provider
+  status     String   @default("nao_configurado")
+  metadataJson Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("integration_credentials")
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventType  String
+  payloadJson Json
+  processed  Boolean  @default(false)
+  receivedAt DateTime @default(now())
+
+  @@map("webhook_events")
+}

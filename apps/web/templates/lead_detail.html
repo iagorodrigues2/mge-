@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ c.trade_name }} — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('leads') }}">&larr; Tabela Mestre</a></p>
+<h1 class="page-title">{{ c.trade_name }}</h1>
+<p class="page-sub">{{ c.legal_name }} · {{ c.cnpj }} · {{ c.city }}/{{ c.state }} · status <span class="pill">{{ c.status }}</span></p>
+
+{% if c.blocked == 't' %}
+<div class="callout danger">🚫 Empresa bloqueada: {{ c.blocked_reason }}</div>
+{% endif %}
+
+<div class="grid cols-2">
+  <div class="card section">
+    <h3>Identificação</h3>
+    <table>
+      <tr><td>Site</td><td>{{ c.website or '—' }}</td></tr>
+      <tr><td>Instagram</td><td>{{ c.instagram or '—' }}</td></tr>
+      <tr><td>E-mail empresarial</td><td>{{ c.public_business_email or '—' }}</td></tr>
+      <tr><td>Telefone empresarial</td><td>{{ c.public_business_phone or '—' }}</td></tr>
+      <tr><td>Catálogo</td><td>{{ c.catalog_summary or '—' }}</td></tr>
+    </table>
+    <h3 style="margin-top:14px">Fontes</h3>
+    {% for s in c.sources %}<p class="small">{{ s.type }} — {{ s.note or s.url }} <span class="muted">({{ s.collected_at[:10] }})</span></p>{% endfor %}
+  </div>
+
+  <div class="card section">
+    <h3>Contatos</h3>
+    <table>
+      {% for ct in c.contacts %}
+      <tr><td>{{ ct.name }}<br><span class="muted small">{{ ct.role }}</span></td>
+          <td>{{ ct.email or '—' }}<br>{{ ct.whatsapp or '—' }}</td>
+          <td><span class="pill">confiança: {{ ct.confidence }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card section">
+    <h3>Auditoria de marketplace</h3>
+    <table><tr><th>Canal</th><th>Presente?</th><th>Qualidade/preço</th></tr>
+    {% for mp in c.marketplace_presences %}
+      <tr><td>{{ mp.channel }}</td><td>{{ "Sim" if mp.present == 't' else "Não" }}</td><td>{{ mp.price_alignment or '—' }}</td></tr>
+    {% endfor %}
+    </table>
+    <h3 style="margin-top:14px">Achados</h3>
+    {% for af in c.audit_findings %}
+      <p class="small">• {{ af.summary }} <span class="muted">(confiança {{ af.confidence }}, fonte: {{ af.source }})</span></p>
+    {% endfor %}
+  </div>
+
+  <div class="card section">
+    <h3>Score de qualificação</h3>
+    {% for ls in c.lead_scores %}
+      <p><span class="badge {{ ls.potential }}">{{ ls.potential }}</span> total {{ ls.total }}/100 — confiança {{ ls.confidence }}</p>
+      <table class="small">
+        <tr><td>Product fit</td><td>{{ ls.product_fit }}/20</td></tr>
+        <tr><td>Marketplace gap</td><td>{{ ls.marketplace_gap }}/20</td></tr>
+        <tr><td>Estrutura</td><td>{{ ls.business_structure }}/15</td></tr>
+        <tr><td>Catálogo</td><td>{{ ls.catalog_quality }}/15</td></tr>
+        <tr><td>Sinais de investimento</td><td>{{ ls.investment_signals }}/10</td></tr>
+        <tr><td>Contactabilidade</td><td>{{ ls.contactability }}/10</td></tr>
+        <tr><td>Clareza do problema</td><td>{{ ls.problem_clarity }}/10</td></tr>
+      </table>
+      <p class="small muted">{{ ls.rationale }}</p>
+    {% else %}<p class="muted small">Ainda não auditado.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="card section">
+  <h3>Aprovação humana (seção Etapa 3)</h3>
+  <form method="post" action="{{ url_for('lead_approve', company_id=c.id) }}">
+    <div class="filters">
+      <select name="decision">
+        <option value="aprovar">Aprovar</option>
+        <option value="espera">Colocar em espera (nutrir)</option>
+        <option value="rejeitar">Rejeitar</option>
+        <option value="bloquear">Bloquear</option>
+        <option value="nova_pesquisa">Solicitar nova pesquisa</option>
+      </select>
+      <input type="text" name="note" placeholder="Motivo / observação" style="flex:1">
+      <button class="btn" type="submit">Registrar decisão</button>
+    </div>
+  </form>
+  {% if c.approvals %}
+    <table class="small"><tr><th>Decisão</th><th>Nota</th><th>Data</th></tr>
+    {% for a in c.approvals %}<tr><td>{{ a.decision }}</td><td>{{ a.note }}</td><td>{{ a.created_at[:16] }}</td></tr>{% endfor %}
+    </table>
+  {% endif %}
+</div>
+
+<div class="card section">
+  <h3>Mensagens e contato assistido</h3>
+  {% if c.outreach_messages %}
+    {% for msg in c.outreach_messages %}
+      <p class="small"><span class="pill">{{ msg.step }}</span> via {{ msg.channel }} — aprovada: {{ "sim" if msg.approved == 't' else "não" }}</p>
+      <div class="msg-box">{{ msg.text }}</div>
+    {% endfor %}
+    <p style="margin-top:10px"><a class="btn" href="{{ url_for('lead_whatsapp', company_id=c.id) }}">Abrir WhatsApp assistido →</a></p>
+  {% else %}
+    <p class="muted small">Nenhuma mensagem gerada ainda para esta empresa.</p>
+  {% endif %}
+  {% if c.outreach_attempts %}
+    <table class="small" style="margin-top:10px"><tr><th>Canal</th><th>Status</th><th>Confirmado por humano?</th><th>Enviado em</th></tr>
+    {% for a in c.outreach_attempts %}
+      <tr><td>{{ a.channel }}</td><td><span class="pill">{{ a.status }}</span></td><td>{{ "sim" if a.human_confirmed == 't' else "não" }}</td><td>{{ (a.sent_at or '')[:16] }}</td></tr>
+    {% endfor %}
+    </table>
+  {% endif %}
+</div>
+
+{% if c.conversations %}
+<div class="card section">
+  <h3>Conversa e classificação de resposta</h3>
+  {% for conv in c.conversations %}
+    {% for r in conv.replies %}
+      <p class="small"><span class="pill">{{ r.classification }}</span> {{ r.note }} <span class="muted">({{ r.classified_at[:16] }})</span></p>
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if c.deal %}
+<div class="card section">
+  <h3>Negócio (Deal)</h3>
+  {% for d in c.deal %}
+    <p>Estágio: <span class="pill">{{ d.stage_name }}</span> · Valor proposto: {{ d.value_proposed_cents|brl }} · Valor contratado: {{ d.value_contracted_cents|brl }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card section">
+  <h3>Tarefas</h3>
+  <table class="small"><tr><th>Tarefa</th><th>Vencimento</th><th>Status</th></tr>
+  {% for t in c.tasks %}<tr><td>{{ t.title }}</td><td>{{ t.due_at[:16] }}</td><td>{{ t.status }}</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

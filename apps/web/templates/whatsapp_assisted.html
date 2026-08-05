@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp assistido — {{ c.trade_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('lead_detail', company_id=c.id) }}">&larr; {{ c.trade_name }}</a></p>
+<h1 class="page-title">WhatsApp assistido</h1>
+<p class="page-sub">Modo 1 — Assistido (seção 15). O sistema abre o WhatsApp com o texto pronto; o clique em enviar é sempre seu.</p>
+
+{% if not business_hours.allowed %}
+<div class="callout danger">🚫 {{ business_hours.reason|capitalize }}. Não recomendamos abrir este contato agora.</div>
+{% endif %}
+
+{% if not msg %}
+<div class="callout warn">Nenhuma mensagem aprovada encontrada para esta empresa.</div>
+{% elif not wa_link %}
+<div class="callout warn">Não há um WhatsApp de contato cadastrado para esta empresa — preencha o campo de contato antes de prosseguir.</div>
+{% else %}
+<div class="card section">
+  <h3>Mensagem que será pré-preenchida</h3>
+  <div class="msg-box">{{ msg.text }}</div>
+</div>
+<div class="card section">
+  <ol class="small">
+    <li>Clique em "Abrir WhatsApp com mensagem pronta" — isso abre o wa.me em outra aba, com o texto já preenchido.</li>
+    <li>Revise o texto dentro do WhatsApp.</li>
+    <li><strong>Você</strong> clica em enviar dentro do WhatsApp (o sistema nunca clica sozinho).</li>
+    <li>Volte aqui e clique em "Confirmar que enviei" para registrar a tentativa de contato.</li>
+  </ol>
+  <p><a class="btn" href="{{ wa_link }}" target="_blank" rel="noopener">Abrir WhatsApp com mensagem pronta →</a></p>
+  {% set last_attempt = c.outreach_attempts[-1] if c.outreach_attempts else None %}
+  {% if last_attempt %}
+  <form method="post" action="{{ url_for('lead_whatsapp_confirm', company_id=c.id) }}" style="margin-top:10px">
+    <input type="hidden" name="attempt_id" value="{{ last_attempt.id }}">
+    <button class="btn secondary" type="submit">Confirmar que enviei</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Compliance — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Compliance</h1>
+<p class="page-sub">Seção 6.7 / 14 — nada aqui é opcional.</p>
+
+<div class="callout {{ 'danger' if not business_hours.allowed else '' }}">
+  Horário comercial agora: {{ business_hours.reason }}
+</div>
+
+<div class="grid cols-2">
+  <div class="card section">
+    <h3>Blocklist</h3>
+    <table class="small"><tr><th>Tipo</th><th>Valor</th><th>Motivo</th></tr>
+    {% for b in blocklist %}<tr><td>{{ b.type }}</td><td>{{ b.value }}</td><td>{{ b.reason }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card section">
+    <h3>Opt-outs</h3>
+    <table class="small"><tr><th>Empresa</th><th>Contato</th><th>Motivo</th></tr>
+    {% for o in opt_outs %}<tr><td>{{ o.trade_name }}</td><td>{{ o.contact_value }}</td><td>{{ o.reason }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card section">
+    <h3>Empresas bloqueadas</h3>
+    <table class="small"><tr><th>Empresa</th><th>Motivo</th></tr>
+    {% for c in blocked_companies %}<tr><td>{{ c.trade_name }}</td><td>{{ c.blocked_reason }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card section">
+    <h3>Log de auditoria (últimos 30)</h3>
+    <table class="small"><tr><th>Entidade</th><th>Ação</th><th>Data</th></tr>
+    {% for a in audit_logs %}<tr><td>{{ a.entity }}#{{ a.entity_id }}</td><td>{{ a.action }}</td><td>{{ a.created_at[:16] }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

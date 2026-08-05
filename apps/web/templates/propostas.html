@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Propostas — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Propostas</h1>
+<div class="card">
+<table>
+  <tr><th>Empresa</th><th>Oferta</th><th>Valor final</th><th>Condição de pagamento</th><th>Status</th><th>Válida até</th></tr>
+  {% for p in proposals %}
+  <tr>
+    <td>{{ p.trade_name }}</td><td>{{ p.offer_name }}</td><td>{{ p.final_price_cents|brl }}</td>
+    <td class="small">{{ p.payment_terms }}</td><td><span class="pill">{{ p.status }}</span></td><td>{{ p.valid_until or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

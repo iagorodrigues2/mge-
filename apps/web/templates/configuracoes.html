@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Configurações — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Configurações — Ofertas e preços</h1>
+<p class="page-sub">Cadastro versionado (seção 3) — nunca hard-coded no código. Alterar aqui muda o comportamento do sistema sem deploy.</p>
+
+{% for p in packages %}
+<div class="card section">
+  <h3>{{ p.name }} <span class="pill">{{ p.code }}</span></h3>
+  <p class="small muted">{{ p.description }}</p>
+  <table class="small">
+    <tr><th>Preço</th><th>Duração</th><th>Válido de</th><th>Fundador?</th><th>Nota</th></tr>
+    {% for pv in p.prices %}
+    <tr>
+      <td><strong>{{ pv.price_cents|brl }}</strong></td>
+      <td>{{ pv.duration_days ~ ' dias' if pv.duration_days else '—' }}</td>
+      <td>{{ pv.valid_from[:10] }}</td>
+      <td>{{ "Sim (máx " ~ pv.max_founder_slots ~ ")" if pv.is_founder_offer == 't' else "Não" }}</td>
+      <td>{{ pv.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

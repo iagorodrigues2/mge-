@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Financeiro — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Financeiro</h1>
+<p class="page-sub">Separação entre proposto, contratado, faturado e recebido — seção 12H. Só entra como "ganho e recebido" após confirmação do 1º pagamento.</p>
+
+<div class="grid cols-2">
+  <div class="card section">
+    <h3>Parcelas</h3>
+    <table class="small">
+      <tr><th>Empresa</th><th>Parcela</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr>
+      {% for i in installments %}
+      <tr><td>{{ i.trade_name }}</td><td>{{ i.seq }}</td><td>{{ i.amount_cents|brl }}</td><td>{{ i.due_date }}</td>
+        <td><span class="pill">{{ i.status }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="card section">
+    <h3>Eventos de receita (dinheiro efetivamente recebido)</h3>
+    <table class="small">
+      <tr><th>Empresa</th><th>Tipo</th><th>Valor</th><th>Data</th></tr>
+      {% for r in revenue %}
+      <tr><td>{{ r.trade_name }}</td><td>{{ r.type }}</td><td>{{ r.amount_cents|brl }}</td><td>{{ r.occurred_at[:10] }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

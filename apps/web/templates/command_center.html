@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Command Center — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Command Center diário</h1>
+<p class="page-sub">O que precisa ser feito hoje, timezone America/Sao_Paulo.</p>
+
+{% if not business_hours.allowed %}
+<div class="callout warn">⚠ {{ business_hours.reason|capitalize }} — novas abordagens não devem ser iniciadas agora (seção 14).</div>
+{% endif %}
+
+<div class="grid cols-4 section">
+  <div class="card"><div class="stat">{{ m.companies_researched }}</div><div class="stat-label">Empresas pesquisadas</div></div>
+  <div class="card"><div class="stat">{{ m.qualified }}</div><div class="stat-label">Leads qualificados (A/B)</div></div>
+  <div class="card"><div class="stat">{{ m.contacted }}</div><div class="stat-label">Contatos realizados</div></div>
+  <div class="card"><div class="stat">{{ m.positive_replies }}/{{ m.replies }}</div><div class="stat-label">Respostas positivas / total</div></div>
+  <div class="card"><div class="stat">{{ m.meetings }}</div><div class="stat-label">Reuniões</div></div>
+  <div class="card"><div class="stat">{{ m.proposals }}</div><div class="stat-label">Propostas</div></div>
+  <div class="card"><div class="stat">{{ m.pipeline_value_cents|brl }}</div><div class="stat-label">Pipeline (proposto, aberto)</div></div>
+  <div class="card"><div class="stat">{{ m.received_cents|brl }}</div><div class="stat-label">Dinheiro efetivamente recebido</div></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card section">
+    <h3>1. Agenda de hoje</h3>
+    {% if m.meetings_today %}
+      <table><tr><th>Horário</th><th>Empresa</th><th>Reunião</th></tr>
+      {% for e in m.meetings_today %}
+        <tr><td>{{ e.starts_at[11:16] }}</td><td>{{ e.trade_name or '—' }}</td><td>{{ e.title }}</td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhuma reunião hoje.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>2. Follow-ups de hoje</h3>
+    {% if m.due_today %}
+      <table><tr><th>Tarefa</th><th>Empresa</th><th></th></tr>
+      {% for t in m.due_today %}
+        <tr><td>{{ t.title }}</td><td>{{ t.trade_name or '—' }}</td>
+          <td><form class="inline" method="post" action="{{ url_for('task_complete', task_id=t.id) }}">
+            <button class="btn small secondary">Concluir</button></form></td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhum follow-up vencendo hoje.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>3. Pendências críticas (atrasadas)</h3>
+    {% if m.overdue %}
+      <table><tr><th>Tarefa</th><th>Empresa</th><th>Vencia em</th><th></th></tr>
+      {% for t in m.overdue %}
+        <tr><td>{{ t.title }}</td><td>{{ t.trade_name or '—' }}</td><td>{{ t.due_at[:10] }}</td>
+          <td><form class="inline" method="post" action="{{ url_for('task_complete', task_id=t.id) }}">
+            <button class="btn small secondary">Concluir</button></form></td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhuma pendência atrasada. 🎉</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>4. Respostas novas</h3>
+    {% if m.replied_new %}
+      <table><tr><th>Empresa</th><th>Classificação</th></tr>
+      {% for r in m.replied_new %}
+        <tr><td><a href="{{ url_for('lead_detail', company_id=r.id) }}">{{ r.trade_name }}</a></td><td><span class="pill">{{ r.classification }}</span></td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Sem respostas novas.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>6. Propostas em negociação</h3>
+    {% if m.proposals_open %}
+      <table><tr><th>Empresa</th><th>Status</th><th>Válida até</th></tr>
+      {% for p in m.proposals_open %}
+        <tr><td>{{ p.trade_name }}</td><td><span class="pill">{{ p.status }}</span></td><td>{{ p.valid_until or '—' }}</td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhuma proposta em aberto.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>7. Contratos aguardando</h3>
+    {% if m.contracts_pending %}
+      <table><tr><th>Empresa</th><th>Status</th></tr>
+      {% for c in m.contracts_pending %}
+        <tr><td>{{ c.trade_name }}</td><td><span class="pill">{{ c.status }}</span></td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhum contrato pendente.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>8. Pagamentos esperados</h3>
+    {% if m.payments_due %}
+      <table><tr><th>Empresa</th><th>Valor</th><th>Vencimento</th></tr>
+      {% for i in m.payments_due %}
+        <tr><td>{{ i.trade_name }}</td><td>{{ i.amount_cents|brl }}</td><td>{{ i.due_date }}</td></tr>
+      {% endfor %}
+      </table>
+    {% else %}<p class="muted small">Nenhum pagamento pendente.</p>{% endif %}
+  </div>
+
+  <div class="card section">
+    <h3>10. Próximas melhores ações</h3>
+    <ul class="small">
+      <li>Aprovar leads pendentes na <a href="{{ url_for('leads') }}?status=PENDING_APPROVAL">Tabela Mestre</a>.</li>
+      <li>Revisar o <a href="{{ url_for('kanban') }}">Kanban</a> por negócios parados.</li>
+      <li>Conferir a fila de <a href="{{ url_for('compliance') }}">Compliance</a>.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

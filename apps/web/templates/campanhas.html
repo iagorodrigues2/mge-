@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Campanhas — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Campanhas</h1>
+<p class="page-sub">Uma campanha por segmento — nunca misturar segmentos na mesma pesquisa (seção 4.1).</p>
+<div class="card">
+<table>
+  <tr><th>Nome</th><th>Segmento</th><th>Região</th><th>Oferta</th><th>Status</th><th>Limite diário</th><th>Responsável</th></tr>
+  {% for c in campaigns %}
+  <tr>
+    <td>{{ c.name }}</td><td>{{ c.segment_name }}</td><td>{{ c.region }}</td><td>{{ c.offer_name }}</td>
+    <td><span class="pill">{{ c.status }}</span></td>
+    <td>{{ c.daily_search_limit }} buscas / {{ c.daily_outreach_limit }} contatos</td>
+    <td>{{ c.owner_name }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

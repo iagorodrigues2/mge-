@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Tabela Mestre — Marketplace Growth Engine{% endblock %}
+{% block content %}
+<h1 class="page-title">Tabela Mestre de Leads</h1>
+<p class="page-sub">{{ companies|length }} empresa(s) — seção 12B.</p>
+
+<form class="filters" method="get">
+  <input type="text" name="q" placeholder="Buscar por nome ou cidade" value="{{ q }}">
+  <select name="segment_id">
+    <option value="">Todos os segmentos</option>
+    {% for s in segments %}
+      <option value="{{ s.id }}" {% if segment_id == s.id|string %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  </select>
+  <select name="status">
+    <option value="">Todos os status</option>
+    {% for st in ["FOUND","IN_AUDIT","QUALIFIED","PENDING_APPROVAL","APPROVED","CONTACTED","FOLLOW_UP","REPLIED","MEETING_SCHEDULED","PROPOSAL_SENT","CONTRACT_SIGNED","WON_AND_PAID","NURTURE","LOST","BLOCKED"] %}
+      <option value="{{ st }}" {% if status == st %}selected{% endif %}>{{ st }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn secondary" type="submit">Filtrar</button>
+</form>
+
+<div class="card">
+<table>
+  <tr>
+    <th>Empresa</th><th>Cidade/UF</th><th>Segmento</th><th>Status</th><th>Score</th><th>Potencial</th><th>Campanha</th>
+  </tr>
+  {% for c in companies %}
+  <tr>
+    <td><a href="{{ url_for('lead_detail', company_id=c.id) }}">{{ c.trade_name }}</a></td>
+    <td>{{ c.city }}/{{ c.state }}</td>
+    <td>{{ c.segment_name or '—' }}</td>
+    <td><span class="pill">{{ c.status }}</span></td>
+    <td>{{ c.score_total or '—' }}</td>
+    <td>{% if c.score_potential %}<span class="badge {{ c.score_potential }}">{{ c.score_potential }}</span>{% else %}—{% endif %}</td>
+    <td class="small muted">{{ c.campaign_name or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}
