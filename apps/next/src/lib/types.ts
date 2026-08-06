@@ -17,6 +17,7 @@ export type LeadStage =
 export type Potential = "A" | "B" | "NUTRIR" | "NAO_ABORDAR";
 
 export interface ScoreBreakdown {
+  model?: "legacy";
   product_fit: number;
   marketplace_gap: number;
   business_structure: number;
@@ -29,6 +30,24 @@ export interface ScoreBreakdown {
   confidence: "alto" | "medio" | "baixo";
   rationale: string;
 }
+
+// Score alinhado ao ICP (fabricante/indústria/distribuidor/importador).
+// Convive com o legado: lead.score pode ser um ou outro (discriminado por `model`).
+export interface IcpScore {
+  model: "icp";
+  perfil_icp: number; // 0-30 (tipo de empresa, pelo CNAE)
+  perfil_tipo: string; // "Indústria / fabricante" | "Distribuidor / atacadista" | ...
+  lacuna_marketplace: number; // 0-25
+  porte_tradicao: number; // 0-15
+  produto_marca: number; // 0-15
+  contatabilidade: number; // 0-15
+  total: number;
+  potential: Potential;
+  confidence: "alto" | "medio" | "baixo";
+  rationale: string;
+}
+
+export type LeadScore = ScoreBreakdown | IcpScore;
 
 export interface OutreachAttempt {
   step: string; // contato_inicial | followup_1 | ...
@@ -81,8 +100,9 @@ export interface Lead {
   data_abertura?: string; // YYYY-MM-DD (data_inicio_atividade)
   enriched_at?: string; // ISO — quando foi enriquecido
   enrich_source?: string; // brasilapi
+  qualified_at?: string; // ISO — quando passou pela qualificação (perfil ICP + marketplace)
 
-  score?: ScoreBreakdown;
+  score?: LeadScore;
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;

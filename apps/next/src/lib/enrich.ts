@@ -67,13 +67,12 @@ export interface EnrichResult {
   error?: string;
 }
 
-export async function enrichLeadByCnpj(id: string, cnpjRaw: string): Promise<EnrichResult> {
+// Busca o CNPJ na Receita e escreve os dados cadastrais NO lead (muta em memória,
+// não persiste, não pontua). Reaproveitado pelo enriquecimento manual e pela
+// qualificação em lote. Retorna a situação cadastral encontrada.
+export async function applyCnpjToLead(lead: Lead, cnpjRaw: string): Promise<{ ativa: boolean; situacao?: string }> {
   const cnpj = normalizeCnpj(cnpjRaw);
-  if (!cnpj) return { ok: false, error: "CNPJ inválido — informe os 14 dígitos." };
-
-  const lead = await getLead(id);
-  if (!lead) return { ok: false, error: "Lead não encontrado." };
-
+  if (!cnpj) throw new Error("CNPJ inválido — informe os 14 dígitos.");
   const data = await fetchCnpj(cnpj);
 
   const razao = data.razao_social?.trim();
@@ -83,45 +82,42 @@ export async function enrichLeadByCnpj(id: string, cnpjRaw: string): Promise<Enr
   const telefone = toE164(data.ddd_telefone_1);
   const email = data.email?.trim().toLowerCase() || undefined;
   const anos = yearsSince(data.data_inicio_atividade);
-
-  // Dados oficiais são autoritativos: sobrescrevem o gerado, mas nunca apagam
-  // um valor já existente com vazio.
   const nomeReal = fantasia || razao;
   const eraFicticio = /fict[ií]cia/i.test(lead.empresa);
 
-  const updated: Lead = {
-    ...lead,
-    cnpj,
-    razao_social: razao ?? lead.razao_social,
-    nome_fantasia: fantasia ?? lead.nome_fantasia,
-    cnae: data.cnae_fiscal != null ? String(data.cnae_fiscal) : lead.cnae,
-    cnae_descricao: data.cnae_fiscal_descricao ?? lead.cnae_descricao,
-    porte: data.porte ?? lead.porte,
-    situacao_cadastral: situacao ?? lead.situacao_cadastral,
-    data_abertura: data.data_inicio_atividade ?? lead.data_abertura,
-    // nome: se o lead era fictício, o nome real da Receita assume
-    empresa: nomeReal && eraFicticio ? nomeReal : lead.empresa,
-    cidade: data.municipio?.trim() || lead.cidade,
-    uf: data.uf?.trim() || lead.uf,
-    telefone: telefone ?? lead.telefone,
-    email: email ?? lead.email,
-    // sinais confirmados p/ o score (deixam de ser "desconhecidos")
-    years_active: anos ?? lead.years_active,
-    public_contact: telefone || email ? true : lead.public_contact,
-    enriched_at: new Date().toISOString(),
-    enrich_source: "brasilapi",
-  };
+  // Dados oficiais são autoritativos, mas nunca apagam valor existente com vazio.
+  lead.cnpj = cnpj;
+  lead.razao_social = razao ?? lead.razao_social;
+  lead.nome_fantasia = fantasia ?? lead.nome_fantasia;
+  lead.cnae = data.cnae_fiscal != null ? String(data.cnae_fiscal) : lead.cnae;
+  lead.cnae_descricao = data.cnae_fiscal_descricao ?? lead.cnae_descricao;
+  lead.porte = data.porte ?? lead.porte;
+  lead.situacao_cadastral = situacao ?? lead.situacao_cadastral;
+  lead.data_abertura = data.data_inicio_atividade ?? lead.data_abertura;
+  if (nomeReal && eraFicticio) lead.empresa = nomeReal;
+  lead.cidade = data.municipio?.trim() || lead.cidade;
+  lead.uf = data.uf?.trim() || lead.uf;
+  lead.telefone = telefone ?? lead.telefone;
+  lead.email = email ?? lead.email;
+  lead.years_active = anos ?? lead.years_active;
+  if (telefone || email) lead.public_contact = true;
+  lead.enriched_at = new Date().toISOString();
+  lead.enrich_source = "brasilapi";
 
-  // Empresa não-ativa não deve ser prospectada.
-  if (!ativa) {
-    updated.stage = "nao_abordar";
-    updated.approved = false;
-  }
+  return { ativa, situacao };
+}
 
-  updated.score = computeScore(updated);
-  await upsertLead(updated);
+export async function enrichLeadByCnpj(id: string, cnpjRaw: string): Promise<EnrichResult> {
+  if (!normalizeCnpj(cnpjRaw)) return { ok: false, error: "CNPJ inválido — informe os 14 dígitos." };
+  const lead = await getLead(id);
+  if (!lead) return { ok: false, error: "Lead não encontrado." };
 
-  return { ok: true, lead: updated, situacao, ativa };
+  const { ativa, situacao } = await applyCnpjToLead(lead, cnpjRaw);
+  if (!ativa) { lead.stage = "nao_abordar"; lead.approved = false; }
+  lead.score = computeScore(lead);
+  await upsertLead(lead);
+
+  return { ok: true, lead, situacao, ativa };
 }
 
 // Um site "real" (não o placeholder do gerador fictício) do qual vale a pena

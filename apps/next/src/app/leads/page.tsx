@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
+import QualifyButton from "@/components/QualifyButton";
 import type { Lead } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,12 @@ export default async function LeadsPage() {
           <h1 style={{ marginBottom: 4 }}>Tabela de Leads</h1>
           <p className="sub" style={{ marginTop: 0 }}>{leads.length} leads · {abordaveis.length} aprováveis (A/B) · {enriquecidos} enriquecidos. Só A e B liberam o botão de aprovar.</p>
         </div>
-        {leads.length > 0 && <BatchEnrichButton />}
+        {leads.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+            <QualifyButton />
+            <BatchEnrichButton />
+          </div>
+        )}
       </div>
 
       {leads.length === 0 && (
@@ -66,7 +72,11 @@ export default async function LeadsPage() {
                       {l.segmento}
                       <div className="stage">{[l.cidade, l.uf].filter(Boolean).join("/")}</div>
                     </td>
-                    <td><span className="score">{l.score?.total ?? "—"}</span><div className="stage">conf. {l.score?.confidence}</div></td>
+                    <td>
+                      <span className="score">{l.score?.total ?? "—"}</span>
+                      {l.score?.model === "icp" && <div className="stage">{l.score.perfil_tipo}</div>}
+                      <div className="stage">conf. {l.score?.confidence}</div>
+                    </td>
                     <td><span className={`badge ${pot}`}>{pot}</span></td>
                     <td><span className="stage">{STAGE_LABEL[l.stage] ?? l.stage}</span></td>
                     <td>

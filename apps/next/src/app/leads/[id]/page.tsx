@@ -33,7 +33,23 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
         <div className="panel">
           <h2 style={{ marginTop: 0 }}>Score {s?.total ?? "—"} · <span className={`badge ${s?.potential}`}>{s?.potential}</span></h2>
-          {s && (
+          {s?.model === "icp" && (
+            <>
+              <p className="hint" style={{ marginTop: 0 }}>Perfil: <b>{s.perfil_tipo}</b></p>
+              <table>
+                <tbody>
+                  {([
+                    ["Perfil ICP (tipo)", s.perfil_icp, 30], ["Lacuna de marketplace", s.lacuna_marketplace, 25],
+                    ["Porte & tradição", s.porte_tradicao, 15], ["Produto & marca própria", s.produto_marca, 15],
+                    ["Contatabilidade", s.contatabilidade, 15],
+                  ] as [string, number, number][]).map(([k, v, max]) => (
+                    <tr key={k}><td>{k}</td><td style={{ textAlign: "right" }}>{v}/{max}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {s && s.model !== "icp" && (
             <table>
               <tbody>
                 {([

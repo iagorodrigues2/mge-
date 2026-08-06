@@ -9,9 +9,10 @@ export async function POST(req: Request) {
     const segmento = String(body.segmento ?? "").trim();
     const regiao = body.regiao ? String(body.regiao).trim() : undefined;
     const quantidade = Number(body.quantidade ?? 8);
+    const perfil = body.perfil ? String(body.perfil).trim() : undefined;
     if (!segmento) return NextResponse.json({ error: "informe o segmento" }, { status: 400 });
 
-    const { mode, leads } = await scoutByNiche(segmento, regiao, quantidade);
+    const { mode, leads } = await scoutByNiche(segmento, regiao, quantidade, perfil);
     return NextResponse.json({
       ok: true,
       mode,

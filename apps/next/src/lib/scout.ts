@@ -1,14 +1,13 @@
 // Agente Scout — busca de leads por nicho (seção 6.1).
-// Dois modos:
-//   1. Busca real na internet — se SERPER_API_KEY (serper.dev, Google) ou
-//      BRAVE_API_KEY estiver setado, pesquisa empresas do nicho de verdade.
-//   2. Gerador — sem chave, gera candidatos FICTÍCIOS plausíveis (marcados),
-//      para o fluxo funcionar de ponta a ponta sem depender de credencial.
-// Nunca inventa CNPJ/telefone real (seção 16). Sinais não confirmados ficam
-// como desconhecidos e o score os trata de forma conservadora.
+//   1. Busca real (SERPER/BRAVE): pesquisa lojas do nicho, FILTRA lixo
+//      (listicles/artigos/marketplaces), deduplica por domínio e anexa o CNPJ.
+//   2. Gerador (sem chave): candidatos FICTÍCIOS marcados, p/ o fluxo rodar.
+// Nunca inventa CNPJ/telefone real. A lacuna de marketplace e o score fino são
+// calculados no passo de qualificação (qualify.ts), não aqui.
 import { computeScore } from "./score";
 import { upsertLead } from "./db";
 import { findCnpjInText, discoverCnpjFromSite } from "./cnpj-finder";
+import { searchWeb } from "./search";
 import type { Lead } from "./types";
 
 // Executa `fn` sobre `items` com no máximo `limit` em paralelo.
@@ -31,31 +30,73 @@ function newId(): string {
   return `lead_${Date.now().toString(36)}_${counter.toString(36)}`;
 }
 
-interface WebHit { title: string; link: string; snippet: string; }
-
-async function searchWeb(query: string, n: number): Promise<WebHit[]> {
-  const serper = process.env.SERPER_API_KEY;
-  if (serper) {
-    const res = await fetch("https://google.serper.dev/search", {
-      method: "POST",
-      headers: { "X-API-KEY": serper, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: query, gl: "br", hl: "pt-br", num: n }),
-    });
-    const data = (await res.json()) as { organic?: WebHit[] };
-    return (data.organic ?? []).slice(0, n);
-  }
-  const brave = process.env.BRAVE_API_KEY;
-  if (brave) {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&country=br&count=${n}`;
-    const res = await fetch(url, { headers: { "X-Subscription-Token": brave, Accept: "application/json" } });
-    const data = (await res.json()) as { web?: { results?: { title: string; url: string; description: string }[] } };
-    return (data.web?.results ?? []).slice(0, n).map((r) => ({ title: r.title, link: r.url, snippet: r.description }));
-  }
-  return [];
-}
-
 function cleanCompanyName(title: string): string {
   return title.split(/[|\-–—:]/)[0].trim().slice(0, 60) || title.slice(0, 60);
+}
+
+// domínio registrável (sem www) — usado p/ deduplicar e gerar id determinístico
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+function idFromHost(host: string): string {
+  return "lead_dom_" + host.replace(/[^a-z0-9]+/g, "_").replace(/_+$/g, "");
+}
+
+// Domínios que NÃO são lojas-lead: marketplaces, redes, publishers/diretórios.
+const NON_STORE_HOST = /(mercadolivre|mercadolibre|amazon\.|shopee|magazineluiza|magalu|americanas|casasbahia|submarino|shoptime|aliexpress|shein|olx|enjoei|elo7|instagram|facebook|linkedin|youtube|tiktok|twitter|x\.com|pinterest|wikipedia|reclameaqui|tripadvisor|globo\.|g1\.|uol\.|terra\.|ig\.com|r7\.|estadao|folha|exame|catracalivre|gov\.br|google\.|maps\.)/i;
+// Títulos de artigo/listicle (não é uma loja).
+const LISTICLE_TITLE = /(\b\d+\s+(melhores|lojas|marcas|sites|op[çc][õo]es)\b|melhores lojas|as\s+\d+|top\s*\d+|ranking|confira|conhe[çc]a|veja\s|guia\s+d|dicas\s|onde comprar|vale a pena|review)/i;
+
+function isStoreHit(h: { title: string; link: string }): boolean {
+  const host = hostOf(h.link);
+  if (!host) return false;
+  if (NON_STORE_HOST.test(host)) return false;
+  if (LISTICLE_TITLE.test(h.title)) return false;
+  return true;
+}
+
+async function candidatesFromWeb(segmento: string, regiao: string | undefined, n: number, perfil?: string): Promise<Partial<Lead>[]> {
+  // Alvo (ICP): fabricante/indústria/distribuidor/importador/atacado com marca
+  // própria — não varejo iniciante. `perfil` permite mirar um tipo específico.
+  const alvo = perfil ?? "fabricante OR indústria OR distribuidor OR importador";
+  const q = `${alvo} ${segmento} atacado marca própria ${regiao ?? "Brasil"}`;
+  // pede mais do que precisa porque boa parte é filtrada como lixo
+  const hits = await searchWeb(q, Math.min(Math.max(n * 3, 15), 30));
+
+  // filtra lixo e deduplica por domínio
+  const seen = new Set<string>();
+  const stores = hits.filter(isStoreHit).filter((h) => {
+    const host = hostOf(h.link)!;
+    if (seen.has(host)) return false;
+    seen.add(host);
+    return true;
+  }).slice(0, n);
+
+  // anexa o CNPJ já no intake (snippet → home, timeout curto)
+  return mapLimit(stores, 5, async (h) => {
+    const host = hostOf(h.link)!;
+    let cnpj = findCnpjInText(`${h.title} ${h.snippet}`) ?? undefined;
+    if (!cnpj) cnpj = (await discoverCnpjFromSite(h.link, { timeoutMs: 4000 })) ?? undefined;
+    return {
+      id: idFromHost(host),
+      empresa: cleanCompanyName(h.title),
+      segmento,
+      cidade: regiao,
+      website: `https://${host}`,
+      has_website: true,
+      cnpj,
+      // inferência conservadora: é uma loja do segmento → vende produto físico
+      has_physical_product: true,
+      canal_ou_categoria: segmento,
+      fato_objetivo: "há espaço para estruturar melhor a presença em marketplaces",
+      oportunidade: "estruturar o canal preservando margem",
+      source: "scout_busca",
+    } satisfies Partial<Lead>;
+  });
 }
 
 // ---- Gerador de candidatos fictícios (marcados) ----
@@ -131,37 +172,14 @@ function generateCandidates(segmento: string, regiao: string | undefined, n: num
   return out;
 }
 
-async function candidatesFromWeb(segmento: string, regiao: string | undefined, n: number): Promise<Partial<Lead>[]> {
-  const q = `lojas de ${segmento} marca própria ${regiao ?? "Brasil"} contato`;
-  const hits = await searchWeb(q, n);
-  // Tenta anexar o CNPJ já no intake: primeiro do snippet, senão do site
-  // (só a home, com timeout curto — a varredura profunda fica no lote).
-  return mapLimit(hits, 5, async (h) => {
-    let cnpj = findCnpjInText(`${h.title} ${h.snippet}`) ?? undefined;
-    if (!cnpj) cnpj = (await discoverCnpjFromSite(h.link, { timeoutMs: 4000 })) ?? undefined;
-    return {
-      empresa: cleanCompanyName(h.title),
-      segmento,
-      cidade: regiao,
-      website: h.link,
-      has_website: true,
-      cnpj,
-      canal_ou_categoria: segmento,
-      fato_objetivo: "há espaço para estruturar melhor a presença em marketplaces",
-      oportunidade: "estruturar o canal preservando margem",
-      // sinais não confirmados por busca ficam desconhecidos (score conservador)
-      source: "scout_busca",
-    } satisfies Partial<Lead>;
-  });
-}
-
 export async function scoutByNiche(
   segmento: string,
   regiao: string | undefined,
   quantidade: number,
+  perfil?: string,
 ): Promise<{ mode: "busca" | "gerado"; leads: Lead[] }> {
   const n = Math.max(1, Math.min(quantidade || 8, 30));
-  let partials = await candidatesFromWeb(segmento, regiao, n);
+  let partials = await candidatesFromWeb(segmento, regiao, n, perfil);
   const mode: "busca" | "gerado" = partials.length ? "busca" : "gerado";
   if (!partials.length) partials = generateCandidates(segmento, regiao, n);
 
@@ -169,7 +187,7 @@ export async function scoutByNiche(
   const leads: Lead[] = [];
   for (const p of partials) {
     const base: Lead = {
-      id: newId(),
+      id: p.id ?? newId(),
       empresa: p.empresa ?? "Empresa sem nome",
       segmento: p.segmento ?? segmento,
       stage: "pesquisado",
@@ -182,9 +200,12 @@ export async function scoutByNiche(
       ...p,
     };
     base.score = computeScore(base);
-    // classificação inicial vira o stage sugerido
-    if (base.score.potential === "NAO_ABORDAR") base.stage = "nao_abordar";
-    else if (base.score.potential === "NUTRIR") base.stage = "nutrir";
+    // classificação inicial vira o stage sugerido (só p/ o gerador; leads de
+    // busca são reclassificados no qualify, então ficam como "pesquisado")
+    if (base.source === "scout_gerado") {
+      if (base.score.potential === "NAO_ABORDAR") base.stage = "nao_abordar";
+      else if (base.score.potential === "NUTRIR") base.stage = "nutrir";
+    }
     await upsertLead(base);
     leads.push(base);
   }
