@@ -27,7 +27,7 @@ export async function qualifyLead(id: string): Promise<QualifyResult> {
   // 1. CNPJ + pista de perfil (usa o do intake ou sonda o site fundo)
   let cnpj = lead.cnpj;
   if ((!cnpj || !lead.perfil_hint) && hasRealSite(lead)) {
-    const probe = await probeSite(lead.website!, { deep: true, timeoutMs: 6000 });
+    const probe = await probeSite(lead.website!, { deep: true, timeoutMs: 3500, budgetMs: 8000 });
     cnpj = cnpj ?? probe.cnpj;
     if (!lead.perfil_hint && probe.hint) {
       lead.perfil_hint = probe.hint;

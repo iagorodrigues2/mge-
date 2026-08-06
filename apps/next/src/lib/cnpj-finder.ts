@@ -69,7 +69,7 @@ function originOf(url: string): string | null {
 }
 
 // Páginas onde o CNPJ costuma aparecer (rodapé institucional).
-const DEEP_PATHS = ["/contato", "/sobre", "/quem-somos", "/institucional", "/politica-de-privacidade", "/termos"];
+const DEEP_PATHS = ["/contato", "/sobre", "/quem-somos"];
 
 // Procura o CNPJ no site. shallow (padrão): só a home. deep: home + páginas
 // institucionais comuns. Para quando acha o primeiro CNPJ válido.
@@ -93,16 +93,23 @@ const HINT_RE: [PerfilHint, RegExp][] = [
 export interface SiteProbe { cnpj?: string; hint?: PerfilHint; }
 
 // Uma única varredura do site que colhe CNPJ e a pista de perfil de uma vez.
-export async function probeSite(url: string, opts: { deep?: boolean; timeoutMs?: number } = {}): Promise<SiteProbe> {
+// Respeita um orçamento total de tempo (budgetMs) para não travar o lote.
+export async function probeSite(
+  url: string,
+  opts: { deep?: boolean; timeoutMs?: number; budgetMs?: number } = {},
+): Promise<SiteProbe> {
   const origin = originOf(url);
   if (!origin) return {};
-  const timeoutMs = opts.timeoutMs ?? 5000;
+  const timeoutMs = opts.timeoutMs ?? 3500;
+  const budgetMs = opts.budgetMs ?? 9000;
+  const started = Date.now();
   const pages = [url, origin, ...(opts.deep ? DEEP_PATHS.map((p) => origin + p) : [])];
   const seen = new Set<string>();
   const out: SiteProbe = {};
   for (const page of pages) {
     if (seen.has(page)) continue;
     seen.add(page);
+    if (Date.now() - started > budgetMs) break; // estourou o orçamento
     const text = await fetchText(page, timeoutMs);
     if (!text) continue;
     if (!out.cnpj) out.cnpj = findCnpjInText(text) ?? undefined;
