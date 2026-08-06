@@ -58,6 +58,8 @@ export interface SellerMetrics {
   rating: number; // 0-5
   trend: number; // tendência de vendas (%)
   registrado?: string; // data de registro no ML
+  marcas?: number; // quantas marcas distintas vende (poucas = foco/marca própria)
+  ownBrand?: boolean; // o nome do seller aparece nas marcas (dono de marca)
 }
 
 // Score de seller de marketplace (já vende — o foco é oportunidade/estruturação).

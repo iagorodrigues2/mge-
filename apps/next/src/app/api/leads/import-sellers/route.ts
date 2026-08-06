@@ -32,6 +32,8 @@ export async function POST(req: Request) {
         rating: Number(it.rating ?? 0),
         trend: Number(it.trend ?? 0),
         registrado: it.registrado,
+        marcas: it.marcas != null ? Number(it.marcas) : undefined,
+        ownBrand: it.ownBrand,
       };
       const lead: Lead = {
         id: "lead_ml_" + (mlId || nome.replace(/[^a-z0-9]+/gi, "_")).toLowerCase(),
