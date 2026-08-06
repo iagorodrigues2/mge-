@@ -49,7 +49,8 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
               </table>
             </>
           )}
-          {s && s.model !== "icp" && (
+          {s?.model === "seller" && <p className="hint" style={{ marginTop: 0 }}>{s.tipo}</p>}
+          {s && s.model !== "icp" && s.model !== "seller" && (
             <table>
               <tbody>
                 {([
@@ -93,6 +94,31 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
           ) : null}
         </div>
       </div>
+
+      {lead.seller && (
+        <>
+          <h2>Métricas do seller · Mercado Livre (JoomPulse)</h2>
+          <div className="panel">
+            <table>
+              <tbody>
+                {([
+                  ["Receita média/mês", `R$ ${Math.round(lead.seller.receitaMes).toLocaleString("pt-BR")}`],
+                  ["Vendas/mês", Math.round(lead.seller.vendasMes).toLocaleString("pt-BR")],
+                  ["Vendas totais", Math.round(lead.seller.vendasTotal).toLocaleString("pt-BR")],
+                  ["Produtos", String(lead.seller.produtos)],
+                  ["Ticket médio", `R$ ${lead.seller.ticket.toFixed(2)}`],
+                  ["Avaliação", `${lead.seller.rating} / 5`],
+                  ["Tendência de vendas", `${lead.seller.trend > 0 ? "+" : ""}${lead.seller.trend.toFixed(1)}%`],
+                  ["No ML desde", lead.seller.registrado ? String(lead.seller.registrado).slice(0, 10) : "—"],
+                ] as [string, string][]).map(([k, v]) => (
+                  <tr key={k}><td style={{ color: "var(--muted)" }}>{k}</td><td style={{ textAlign: "right" }}>{v}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="hint" style={{ marginTop: 10 }}>Fonte: JoomPulse. Contato via Mercado Livre (o seller não expõe telefone/e-mail público).</p>
+          </div>
+        </>
+      )}
 
       <h2>Dados cadastrais {lead.enriched_at && <span className={`badge ${lead.situacao_cadastral === "ATIVA" ? "A" : "NAO_ABORDAR"}`}>{lead.situacao_cadastral}</span>}</h2>
       <div className="panel">

@@ -75,6 +75,7 @@ export default async function LeadsPage() {
                     <td>
                       <span className="score">{l.score?.total ?? "—"}</span>
                       {l.score?.model === "icp" && <div className="stage">{l.score.perfil_tipo}</div>}
+                      {l.score?.model === "seller" && <div className="stage">{l.score.tipo}</div>}
                       <div className="stage">conf. {l.score?.confidence}</div>
                     </td>
                     <td><span className={`badge ${pot}`}>{pot}</span></td>

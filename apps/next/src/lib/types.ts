@@ -47,7 +47,30 @@ export interface IcpScore {
   rationale: string;
 }
 
-export type LeadScore = ScoreBreakdown | IcpScore;
+// Métricas de seller de marketplace (fonte: JoomPulse — Mercado Livre/Shopee).
+export interface SellerMetrics {
+  mlId?: string;
+  receitaMes: number; // receita média mensal (R$)
+  vendasMes: number; // vendas médias mensais
+  vendasTotal: number;
+  produtos: number;
+  ticket: number; // ticket médio (R$)
+  rating: number; // 0-5
+  trend: number; // tendência de vendas (%)
+  registrado?: string; // data de registro no ML
+}
+
+// Score de seller de marketplace (já vende — o foco é oportunidade/estruturação).
+export interface SellerScore {
+  model: "seller";
+  tipo: string; // "Seller ML — atacado" | "Seller ML — indústria" | ...
+  total: number;
+  potential: Potential;
+  confidence: "alto" | "medio" | "baixo";
+  rationale: string;
+}
+
+export type LeadScore = ScoreBreakdown | IcpScore | SellerScore;
 
 export interface OutreachAttempt {
   step: string; // contato_inicial | followup_1 | ...
@@ -102,6 +125,7 @@ export interface Lead {
   enrich_source?: string; // brasilapi
   qualified_at?: string; // ISO — quando passou pela qualificação (perfil ICP + marketplace)
   perfil_hint?: "industria" | "distribuidor" | "importador" | "marca_propria"; // inferido do site quando não há CNAE
+  seller?: SellerMetrics; // métricas de marketplace (JoomPulse), quando o lead é um seller
 
   score?: LeadScore;
   stage: LeadStage;
