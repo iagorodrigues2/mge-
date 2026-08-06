@@ -77,19 +77,39 @@ export async function discoverCnpjFromSite(
   url: string,
   opts: { deep?: boolean; timeoutMs?: number } = {},
 ): Promise<string | null> {
-  const origin = originOf(url);
-  if (!origin) return null;
-  const timeoutMs = opts.timeoutMs ?? 5000;
+  return (await probeSite(url, opts)).cnpj ?? null;
+}
 
+// Pistas de perfil ICP no texto do site (quando o CNAE da Receita não estiver
+// disponível). Prioridade: indústria > importador > distribuidor > marca própria.
+export type PerfilHint = "industria" | "distribuidor" | "importador" | "marca_propria";
+const HINT_RE: [PerfilHint, RegExp][] = [
+  ["industria", /f[áa]brica|fabrica[çc][ãa]|ind[úu]stri|fabricamos|somos fabricante|nossa f[áa]brica/i],
+  ["importador", /importa[çc][ãa]|importador|importamos|importados/i],
+  ["distribuidor", /distribuidor|distribui[çc][ãa]|atacad/i],
+  ["marca_propria", /marca pr[óo]pria/i],
+];
+
+export interface SiteProbe { cnpj?: string; hint?: PerfilHint; }
+
+// Uma única varredura do site que colhe CNPJ e a pista de perfil de uma vez.
+export async function probeSite(url: string, opts: { deep?: boolean; timeoutMs?: number } = {}): Promise<SiteProbe> {
+  const origin = originOf(url);
+  if (!origin) return {};
+  const timeoutMs = opts.timeoutMs ?? 5000;
   const pages = [url, origin, ...(opts.deep ? DEEP_PATHS.map((p) => origin + p) : [])];
   const seen = new Set<string>();
+  const out: SiteProbe = {};
   for (const page of pages) {
     if (seen.has(page)) continue;
     seen.add(page);
     const text = await fetchText(page, timeoutMs);
     if (!text) continue;
-    const cnpj = findCnpjInText(text);
-    if (cnpj) return cnpj;
+    if (!out.cnpj) out.cnpj = findCnpjInText(text) ?? undefined;
+    if (!out.hint) {
+      for (const [hint, re] of HINT_RE) { if (re.test(text)) { out.hint = hint; break; } }
+    }
+    if (out.cnpj && out.hint) break;
   }
-  return null;
+  return out;
 }

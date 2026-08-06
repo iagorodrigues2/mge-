@@ -6,7 +6,7 @@
 // calculados no passo de qualificação (qualify.ts), não aqui.
 import { computeScore } from "./score";
 import { upsertLead } from "./db";
-import { findCnpjInText, discoverCnpjFromSite } from "./cnpj-finder";
+import { findCnpjInText, probeSite } from "./cnpj-finder";
 import { searchWeb } from "./search";
 import type { Lead } from "./types";
 
@@ -34,6 +34,19 @@ function cleanCompanyName(title: string): string {
   return title.split(/[|\-–—:]/)[0].trim().slice(0, 60) || title.slice(0, 60);
 }
 
+// Nome a partir do domínio (fallback quando o título é descritivo, não a marca).
+function nameFromHost(host: string): string {
+  const sld = host.replace(/\.(com|net|org|ind|ltda)?\.?(br)?$/i, "").split(".").pop() ?? host;
+  return sld.split(/[-_]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || host;
+}
+
+// Título "descritivo" (frase de categoria) em vez de nome de empresa.
+function looksDescriptive(title: string): boolean {
+  const t = title.trim();
+  if (t.split(/\s+/).length > 4) return true;
+  return /\b(fabricantes?\s+de|lojas?\s+de|onde comprar|atacado de|comprar|melhores|dist[rí]buidores?\s+de)\b/i.test(t);
+}
+
 // domínio registrável (sem www) — usado p/ deduplicar e gerar id determinístico
 function hostOf(url: string): string | null {
   try {
@@ -47,7 +60,7 @@ function idFromHost(host: string): string {
 }
 
 // Domínios que NÃO são lojas-lead: marketplaces, redes, publishers/diretórios.
-const NON_STORE_HOST = /(mercadolivre|mercadolibre|amazon\.|shopee|magazineluiza|magalu|americanas|casasbahia|submarino|shoptime|aliexpress|shein|olx|enjoei|elo7|instagram|facebook|linkedin|youtube|tiktok|twitter|x\.com|pinterest|wikipedia|reclameaqui|tripadvisor|globo\.|g1\.|uol\.|terra\.|ig\.com|r7\.|estadao|folha|exame|catracalivre|gov\.br|google\.|maps\.)/i;
+const NON_STORE_HOST = /(mercadolivre|mercadolibre|amazon\.|shopee|magazineluiza|magalu|americanas|casasbahia|submarino|shoptime|aliexpress|shein|olx|enjoei|elo7|instagram|facebook|linkedin|youtube|tiktok|twitter|x\.com|pinterest|wikipedia|reclameaqui|tripadvisor|globo\.|g1\.|uol\.|terra\.|ig\.com|r7\.|estadao|folha|exame|catracalivre|gov\.br|google\.|maps\.|guiamais|telelistas|solutudo|apontador|econodata|jusbrasil|indeed|catho|glassdoor|cnpj\.|casadosdados|empresascnpj|cnpjs?\.|escavador|consultasocio|ebc\.|sebrae|blogspot|wordpress\.com|medium\.|pinterest|behance)/i;
 // Títulos de artigo/listicle (não é uma loja).
 const LISTICLE_TITLE = /(\b\d+\s+(melhores|lojas|marcas|sites|op[çc][õo]es)\b|melhores lojas|as\s+\d+|top\s*\d+|ranking|confira|conhe[çc]a|veja\s|guia\s+d|dicas\s|onde comprar|vale a pena|review)/i;
 
@@ -76,20 +89,25 @@ async function candidatesFromWeb(segmento: string, regiao: string | undefined, n
     return true;
   }).slice(0, n);
 
-  // anexa o CNPJ já no intake (snippet → home, timeout curto)
+  // sonda o site no intake: CNPJ + pista de perfil (fábrica/atacado/importador)
   return mapLimit(stores, 5, async (h) => {
     const host = hostOf(h.link)!;
-    let cnpj = findCnpjInText(`${h.title} ${h.snippet}`) ?? undefined;
-    if (!cnpj) cnpj = (await discoverCnpjFromSite(h.link, { timeoutMs: 4000 })) ?? undefined;
+    const probe = await probeSite(h.link, { timeoutMs: 4500 });
+    const cnpj = findCnpjInText(`${h.title} ${h.snippet}`) ?? probe.cnpj;
+    const hint = probe.hint;
+    // nome: usa o título quando parece marca; senão deriva do domínio
+    const empresa = looksDescriptive(h.title) ? nameFromHost(host) : cleanCompanyName(h.title);
     return {
       id: idFromHost(host),
-      empresa: cleanCompanyName(h.title),
+      empresa,
       segmento,
       cidade: regiao,
       website: `https://${host}`,
       has_website: true,
       cnpj,
-      // inferência conservadora: é uma loja do segmento → vende produto físico
+      perfil_hint: hint,
+      has_own_brand: hint === "industria" || hint === "marca_propria" ? true : undefined,
+      // inferência conservadora: é uma loja/empresa do segmento → produto físico
       has_physical_product: true,
       canal_ou_categoria: segmento,
       fato_objetivo: "há espaço para estruturar melhor a presença em marketplaces",

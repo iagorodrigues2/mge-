@@ -11,14 +11,22 @@ import type { Lead, IcpScore, Potential } from "./types";
 export function classifyIcp(lead: Lead): { tipo: string; pontos: number; ownBrand: boolean } {
   const cnae = (lead.cnae ?? "").replace(/\D/g, "");
   const div = Number(cnae.slice(0, 2));
+  // CNAE da Receita é autoritativo quando existe.
   if (cnae && div >= 10 && div <= 33) return { tipo: "Indústria / fabricante", pontos: 30, ownBrand: true };
   if (cnae && div === 46) return { tipo: "Distribuidor / atacadista", pontos: 25, ownBrand: false };
   if (cnae && div === 47) {
     if (lead.has_own_brand) return { tipo: "Varejo com marca própria", pontos: 18, ownBrand: true };
     return { tipo: "Varejo comum", pontos: 8, ownBrand: false };
   }
-  if (!cnae) return { tipo: "Sem CNPJ confirmado", pontos: 0, ownBrand: false };
-  return { tipo: `Outro (CNAE ${cnae.slice(0, 2)})`, pontos: 10, ownBrand: false };
+  if (cnae) return { tipo: `Outro (CNAE ${cnae.slice(0, 2)})`, pontos: 10, ownBrand: false };
+  // Sem CNAE: usa a pista lida no site (um pouco menor, por ser inferência).
+  switch (lead.perfil_hint) {
+    case "industria": return { tipo: "Indústria / fabricante (pelo site)", pontos: 28, ownBrand: true };
+    case "importador": return { tipo: "Importador (pelo site)", pontos: 24, ownBrand: false };
+    case "distribuidor": return { tipo: "Distribuidor / atacado (pelo site)", pontos: 24, ownBrand: false };
+    case "marca_propria": return { tipo: "Marca própria (pelo site)", pontos: 16, ownBrand: true };
+    default: return { tipo: "Sem perfil confirmado", pontos: 0, ownBrand: false };
+  }
 }
 
 export function scoreIcp(lead: Lead): IcpScore {

@@ -101,6 +101,7 @@ export interface Lead {
   enriched_at?: string; // ISO — quando foi enriquecido
   enrich_source?: string; // brasilapi
   qualified_at?: string; // ISO — quando passou pela qualificação (perfil ICP + marketplace)
+  perfil_hint?: "industria" | "distribuidor" | "importador" | "marca_propria"; // inferido do site quando não há CNAE
 
   score?: LeadScore;
   stage: LeadStage;

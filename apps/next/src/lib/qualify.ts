@@ -5,7 +5,7 @@
 // Roda em lote, com limite por chamada para caber no tempo da função serverless.
 import { getLead, listLeads, upsertLead } from "./db";
 import { applyCnpjToLead } from "./enrich";
-import { discoverCnpjFromSite } from "./cnpj-finder";
+import { probeSite } from "./cnpj-finder";
 import { marketplaceGap } from "./marketplace";
 import { scoreIcp } from "./icp";
 import type { Lead } from "./types";
@@ -24,10 +24,15 @@ export async function qualifyLead(id: string): Promise<QualifyResult> {
   const lead = await getLead(id);
   if (!lead) return { ok: false, error: "Lead não encontrado." };
 
-  // 1. CNPJ (usa o já anexado no intake ou descobre no site)
+  // 1. CNPJ + pista de perfil (usa o do intake ou sonda o site fundo)
   let cnpj = lead.cnpj;
-  if (!cnpj && hasRealSite(lead)) {
-    cnpj = (await discoverCnpjFromSite(lead.website!, { deep: true, timeoutMs: 6000 })) ?? undefined;
+  if ((!cnpj || !lead.perfil_hint) && hasRealSite(lead)) {
+    const probe = await probeSite(lead.website!, { deep: true, timeoutMs: 6000 });
+    cnpj = cnpj ?? probe.cnpj;
+    if (!lead.perfil_hint && probe.hint) {
+      lead.perfil_hint = probe.hint;
+      if (probe.hint === "industria" || probe.hint === "marca_propria") lead.has_own_brand = true;
+    }
   }
   if (cnpj) {
     try { await applyCnpjToLead(lead, cnpj); } catch { /* segue sem cadastral */ }
