@@ -175,4 +175,10 @@ export const pgStore: Store = {
               on conflict (id) do update set data = excluded.data`;
     return d;
   },
+
+  async deleteLeadsBySource(source) {
+    const sql = await ensure();
+    const rows = await sql`delete from mge_leads where data->>'source' = ${source} returning id`;
+    return rows.length;
+  },
 };

@@ -23,6 +23,7 @@ export interface Store {
   listDeals(): Promise<Deal[]>;
   getDeal(id: string): Promise<Deal | undefined>;
   upsertDeal(d: Deal): Promise<Deal>;
+  deleteLeadsBySource(source: string): Promise<number>;
 }
 
 const usePg = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
@@ -48,3 +49,4 @@ export const upsertProposal = (p: Proposal) => store.upsertProposal(p);
 export const listDeals = () => store.listDeals();
 export const getDeal = (id: string) => store.getDeal(id);
 export const upsertDeal = (d: Deal) => store.upsertDeal(d);
+export const deleteLeadsBySource = (source: string) => store.deleteLeadsBySource(source);
