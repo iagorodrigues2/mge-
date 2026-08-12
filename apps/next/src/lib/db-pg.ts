@@ -181,4 +181,10 @@ export const pgStore: Store = {
     const rows = await sql`delete from mge_leads where data->>'source' = ${source} returning id`;
     return rows.length;
   },
+
+  async deleteLeadById(id) {
+    const sql = await ensure();
+    const rows = await sql`delete from mge_leads where id = ${id} returning id`;
+    return rows.length;
+  },
 };

@@ -148,4 +148,12 @@ export const jsonStore: Store = {
     await persist();
     return before - db.leads.length;
   },
+
+  async deleteLeadById(id) {
+    const db = await ensure();
+    const before = db.leads.length;
+    db.leads = db.leads.filter((l) => l.id !== id);
+    await persist();
+    return before - db.leads.length;
+  },
 };
