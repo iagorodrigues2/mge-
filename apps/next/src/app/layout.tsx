@@ -16,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav style={{ display: "flex", gap: 18 }}>
             <Link href="/">Command Center</Link>
             <Link href="/leads">Leads</Link>
+            <Link href="/sdr-chat">💬 Testar IA</Link>
             <Link href="/propostas">Propostas</Link>
             <Link href="/financeiro">Financeiro</Link>
             <Link href="/configuracoes">Configurações</Link>
