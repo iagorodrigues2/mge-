@@ -2,28 +2,32 @@
 // Cada mensagem precisa carregar um fato real + oportunidade específica.
 import type { Lead } from "./types";
 
+// A primeira mensagem vende A PRÓXIMA RESPOSTA, não o programa (§9). Estrutura
+// obrigatória do outbound (§8): contexto → observação real → hipótese → UMA
+// pergunta curta. Nada de "eu atuo em...", "somos especialistas" ou pedido de
+// reunião logo de cara: a autoridade tem que aparecer na qualidade da
+// observação, não na autopromoção (§4).
 export const TEMPLATES: Record<string, string> = {
   contato_inicial:
-    "Olá, {nome}. Analisei rapidamente a presença digital da {empresa} e " +
-    "encontrei uma oportunidade específica em {canal_ou_categoria}. Vocês têm " +
-    "um catálogo com boa aderência a marketplace, mas hoje {fato_objetivo}. Eu " +
-    "atuo na implantação e escala de Mercado Livre, Amazon e Shopee, olhando " +
-    "margem, estoque, logística e operação. Posso te enviar um diagnóstico bem " +
-    "curto com os três pontos que identifiquei?",
+    "{nome}, olhei a operação da {empresa} em {canal_ou_categoria} e reparei em " +
+    "um ponto: {fato_objetivo}. Isso normalmente tem duas explicações bem " +
+    "diferentes — ou é escolha de estratégia, ou é gargalo de operação — e cada " +
+    "uma tem um efeito distinto na margem. Qual das duas é o caso de vocês?",
+  // Follow-up NUNCA é "passando pra saber se viu" (§27): carrega hipótese nova.
   followup_1:
-    "{nome}, complementando a mensagem anterior: o principal ponto que " +
-    "identifiquei foi {oportunidade}. Não estou falando de simplesmente " +
-    "cadastrar produtos, mas de estruturar o canal para não perder margem e não " +
-    "criar um problema operacional. Faz sentido eu te mandar o diagnóstico?",
+    "{nome}, continuei pensando na {empresa}. O ponto que mais me chamou atenção " +
+    "foi {oportunidade}. A hipótese que eu levantaria é que o gargalo não está no " +
+    "anúncio, e sim antes dele — no giro e na reposição. Isso faz sentido na " +
+    "realidade de vocês ou estou olhando para o lugar errado?",
   followup_2:
-    "Preparei um resumo da {empresa} com os pontos que identifiquei em " +
-    "{canal_ou_categoria}: {oportunidade}. Caso marketplace esteja entre as " +
-    "prioridades deste semestre, consigo te explicar em uma conversa objetiva " +
-    "como eu estruturaria isso.",
+    "{nome}, ficou uma dúvida minha sobre {canal_ou_categoria}: hoje alguém olha " +
+    "de forma integrada para vendas, giro, estoque e caixa na {empresa}, ou cada " +
+    "área decide separado? Pergunto porque, quando isso está separado, o " +
+    "resultado do canal costuma ser decidido fora do canal.",
   encerramento:
-    "{nome}, vou encerrar meu contato para não ser inconveniente. Caso a " +
-    "expansão em Mercado Livre, Amazon ou Shopee entre no planejamento da " +
-    "{empresa}, fico à disposição para compartilhar o diagnóstico que preparei.",
+    "{nome}, vou encerrar meus contatos por aqui para não ser inconveniente. Se " +
+    "essa frente voltar a ser prioridade para a {empresa}, o diagnóstico continua " +
+    "fazendo sentido e é só me chamar.",
 };
 
 const FORBIDDEN = [
@@ -37,6 +41,20 @@ const FORBIDDEN = [
   "só até hoje",
   "últimas vagas",
   "não perca essa chance",
+  // §9 — aberturas que queimam o primeiro contato
+  "espero que esta mensagem",
+  "espero que esteja bem",
+  "gostaria de apresentar",
+  "somos especialistas",
+  "tenho uma solução para sua empresa",
+  "podemos agendar 30 minutos",
+  "podemos marcar 30 minutos",
+  // §27 — follow-up sem valor
+  "passando para saber se viu",
+  "passando pra saber se viu",
+  "só passando para saber",
+  "conseguiu ver minha mensagem",
+  "alguma novidade sobre minha mensagem",
 ];
 
 const MAX_CHARS = 700;
