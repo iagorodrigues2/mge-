@@ -4,7 +4,7 @@
 
 import type { ConversationMsg, DiscoverySlot, SdrState } from "./types";
 import { DISCOVERY_ORDER } from "./types";
-import { confirmed, PERGUNTA_AO_LEAD, precoModo, proximoSlot } from "./sdr-state";
+import { confirmed, PERGUNTA_AO_LEAD, PERGUNTAS_MAX, podeAgendar, precoModo, proximoSlot } from "./sdr-state";
 
 // §9 — aberturas que queimam o primeiro contato.
 const ABERTURAS_PROIBIDAS: RegExp[] = [
@@ -26,6 +26,51 @@ const SE_PASSA_POR_IAGO: RegExp[] = [
   /\bmeu nome (é|e) iago\b/i,
   /\b(eu )?me chamo iago\b/i,
   /\bfala(ndo)? com o iago aqui\b/i,
+];
+
+// Correção §9 — o lead cansou do interrogatório. Quando isso aparece, o roteiro
+// PARA: resumir, dar percepção, explicar o próximo passo.
+const SINAIS_DE_FADIGA: RegExp[] = [
+  /onde (voc[êe] )?quer chegar/i,
+  /(quanta|muita)s? pergunta/i,
+  /isso (t[áa]|est[áa]) (cansativo|chato|demorado)/i,
+  /vai(\s+)?(direto )?ao ponto/i,
+  /vamos (direto )?ao ponto/i,
+  /sem enrola[çc][ãa]o/i,
+  /para que (tanta|essas) pergunta/i,
+  /[ée] um question[áa]rio/i,
+  /interrogat[óo]rio/i,
+];
+
+export function detectaFadiga(texto: string): boolean {
+  return SINAIS_DE_FADIGA.some((re) => re.test(texto));
+}
+
+// "Tudo bem?" é saudação, não pergunta de descoberta. A própria Correção §10
+// prescreve "Boa tarde! Tudo bem? O que te fez procurar o Iago?" — contar isso
+// como duas perguntas puniria o comportamento correto.
+const SAUDACOES_INTERROGATIVAS = /\b(tudo bem|tudo certo|tudo joia|como vai|como voc[êe] est[áa]|beleza|td bem)\s*\?/gi;
+
+export function semSaudacoes(texto: string): string {
+  return texto.replace(SAUDACOES_INTERROGATIVAS, "");
+}
+
+// Quantas perguntas DE VERDADE a mensagem faz.
+export function contaPerguntas(texto: string): number {
+  return (semSaudacoes(texto).match(/\?/g) || []).length;
+}
+
+// Correção §2, §8, §12 — minúcia financeira que NÃO se pergunta no chat.
+// Estas perguntas pertencem à reunião; no WhatsApp viram auditoria.
+const MINUCIA_FINANCEIRA: RegExp[] = [
+  /qual (a |sua |o )?(sua )?margem( de contribui[çc][ãa]o)?\s*(hoje|atual|m[ée]dia)?\s*\?/i,
+  /qual (o |seu )?custo (unit[áa]rio|do produto|de aquisi[çc][ãa]o)/i,
+  /quanto (voc[êe] )?paga de (comiss[ãa]o|imposto|frete)/i,
+  /qual (a |o )?(al[íi]quota|comiss[ãa]o|taxa) (do|da|de)/i,
+  /qual (o |seu )?(ticket m[ée]dio|cmv|markup)/i,
+  /qual (o |seu )?(giro|prazo m[ée]dio|ciclo) (de|do|m[ée]dio)/i,
+  /quanto (voc[êe]s? )?(mant[êe]m|t[êe]m) imobilizado/i,
+  /qual (o |seu )?capital de giro/i,
 ];
 
 // §7 e §15 — linguagem de benchmark inventado.
@@ -56,6 +101,7 @@ export interface GuardContext {
   incoming: string; // última fala do lead
   primeiraMensagem: boolean;
   precosPermitidos: number[]; // valores que PODEM aparecer (pacote candidato + conta do payback)
+  soPergunta: boolean; // a resposta é só pergunta, sem reconhecimento nem percepção
 }
 
 export interface GuardResult {
@@ -198,9 +244,42 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
-  // §39/§40: uma pergunta por vez.
-  const perguntas = (reply.match(/\?/g) || []).length;
+  // §39/§40: uma pergunta por vez (saudação não conta).
+  const perguntas = contaPerguntas(reply);
   if (perguntas > 1) v.push(`§39: ${perguntas} perguntas na mesma mensagem — mande uma só`);
+
+  // ---- Correção Prioritária: o chat não é a consultoria --------------------
+
+  // §9: o lead reclamou. Não dá pra continuar o roteiro nem fazer nova pergunta
+  // de descoberta — tem que resumir, dar percepção e propor o próximo passo.
+  if (state.fadigaDetectada && perguntas > 0 && !/reuni[ãa]o|conversa com o iago|faz sentido|te chamo|agendar/i.test(reply)) {
+    v.push("§9: o lead sinalizou cansaço — pare o roteiro, resuma, dê uma percepção e proponha o próximo passo");
+    bloqueia = true;
+  }
+
+  // §2/§8/§12: minúcia financeira é assunto de reunião, não de WhatsApp.
+  for (const re of MINUCIA_FINANCEIRA) {
+    if (re.test(reply)) {
+      v.push("§2/§12: pergunta de auditoria financeira (margem/custo/comissão/giro) — isso é da reunião, não do chat");
+      bloqueia = true;
+      break;
+    }
+  }
+
+  // §6: pergunta → pergunta → pergunta é robô. Precisa entregar valor no meio.
+  if (perguntas > 0 && ctx.soPergunta && state.turnosSoPergunta >= 1) {
+    v.push("§6: duas perguntas seguidas sem entregar nada — reconheça o que ele disse e dê uma percepção antes de perguntar");
+  }
+
+  // §3/§19: estourou o orçamento e ainda está investigando.
+  if (perguntas > 0 && state.perguntasFeitas >= PERGUNTAS_MAX && !podeAgendar(state)) {
+    v.push(`§3: ${state.perguntasFeitas} perguntas já feitas — pare de investigar e conduza para o próximo passo`);
+  }
+
+  // §7/§18: não convide para a reunião sem ter entregue nenhuma leitura útil.
+  if (!state.percepcaoEntregue && /reuni[ãa]o|conversa com o iago|agendar|marcar (um|uma)/i.test(reply)) {
+    v.push("§18: convidou para a reunião sem ter entregue nenhuma percepção útil antes");
+  }
 
   // §40: mensagem de WhatsApp curta, salvo quando o lead pediu explicação.
   const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh/i.test(ctx.incoming);

@@ -103,29 +103,43 @@ export interface DiscoveryFact {
   at?: string; // ISO — quando entrou no estado atual
 }
 
-// Ordem canônica da descoberta (§11 A→G + capacidade do §5).
+// Descoberta em CAMADAS (Correção Prioritária §4). As 4 primeiras são o que o
+// chat precisa; as demais pertencem à REUNIÃO e são opcionais aqui — perguntar
+// tudo isso no WhatsApp é o "montar a DRE por chat" que a §2 proíbe.
 export type DiscoverySlot =
-  | "situacao" // o que vende, onde, faturamento, operação
-  | "problema" // o que não funciona / por que procurou
-  | "causa" // o que provoca isso
-  | "impacto" // quanto custa: dinheiro, margem, estoque, caixa, tempo
-  | "prioridade" // é pra agora ou pro segundo semestre
-  | "capacidade" // capital, equipe, execução
-  | "decisao" // quem decide, influencia, executa, pode impedir
-  | "criterio"; // ROI, confiança, preço, prazo, risco
+  | "motivo" // camada 1: o que te fez procurar a gente
+  | "problema" // camada 2: a dor PRINCIPAL (uma por vez)
+  | "situacao" // camada 3: contexto leve — já vende? canais? sozinho ou equipe?
+  | "prioridade" // camada 4: quer resolver agora?
+  // --- daqui pra baixo é assunto de REUNIÃO, não de chat (§1, §8, §17) ---
+  | "causa"
+  | "impacto" // números só quando mudam a decisão (§13)
+  | "capacidade"
+  | "decisao"
+  | "criterio";
 
+// Ordem em que o chat persegue as camadas.
 export const DISCOVERY_ORDER: DiscoverySlot[] = [
-  "situacao", "problema", "causa", "impacto", "prioridade", "capacidade", "decisao", "criterio",
+  "motivo", "problema", "situacao", "prioridade",
+  "causa", "impacto", "capacidade", "decisao", "criterio",
 ];
 
+// O que o CHAT precisa. O resto fica pra reunião (§16: não ter medo de marcar
+// reunião sem saber tudo).
+export const SLOTS_DO_CHAT: DiscoverySlot[] = ["motivo", "problema", "situacao", "prioridade"];
+
 // Fase da conversa — DERIVADA dos slots pelo código, nunca escolhida pela IA.
+// Fluxo da §14: abertura → motivo → dor → contexto → percepção → fit → próximo passo.
 export type SdrPhase =
-  | "abertura" // ainda não sabemos nada
-  | "descoberta" // levantando situação e problema
-  | "diagnostico" // achando causa e impacto
-  | "business_case" // construindo a conta com os números do LEAD (§15)
-  | "recomendacao" // só aqui existe oferta e preço
-  | "fechamento"; // recomendação feita, avançando pro Iago
+  | "abertura" // ainda não sabemos por que ele chegou
+  | "motivo" // camada 1
+  | "dor" // camada 2
+  | "contexto" // camada 3
+  | "percepcao" // precisa entregar uma leitura útil antes de convidar (§7, §18)
+  | "fit" // camada 4/5: prioridade + aderência
+  | "proximo_passo" // agendar, orientar, nutrir ou desqualificar
+  | "diagnostico_profundo" // só se o LEAD puxar preço/oferta no chat
+  | "recomendacao"; // oferta e preço (normalmente já com o Iago)
 
 // Conta de retorno construída com os números do próprio lead (§15).
 // Nunca benchmark, nunca percentual inventado.
@@ -167,6 +181,12 @@ export interface SdrSignals {
   capacidadeExecucao: CapacidadeExecucao;
   impactoMensalEstimado?: number; // R$/mês em jogo, derivado do que o LEAD disse
   riscos?: string[]; // §34 — sinais de cliente ruim
+  // Os 4 elementos que a Correção §16 exige para marcar reunião. Nada além
+  // disso é pré-requisito: a reunião é justamente o lugar de aprofundar.
+  problemaReal?: boolean;
+  aderencia?: boolean; // o problema tem a ver com o que o Iago faz
+  vontadeResolver?: boolean;
+  possibilidadeContratacao?: boolean;
 }
 
 export interface SdrState {
@@ -179,6 +199,13 @@ export interface SdrState {
   ofertaMotivo?: string; // por que ESTA e não outra
   precoRevelado?: boolean; // já falamos valor?
   leadPediuPreco?: number; // quantas vezes o lead pediu preço
+
+  // --- Orçamento de perguntas (Correção §3, §17, §19) ---
+  perguntasFeitas: number; // quantas perguntas de descoberta já fizemos
+  percepcaoEntregue: boolean; // já demos uma leitura útil? (§7, §18)
+  turnosSoPergunta: number; // pergunta → pergunta → pergunta = robô (§6)
+  fadigaDetectada?: boolean; // o lead reclamou do interrogatório (§9)
+
   score?: SdrCommercialScore;
   riscos?: string[];
   updatedAt: string;

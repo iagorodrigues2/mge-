@@ -13,10 +13,16 @@ import type {
   BusinessCase, CapacidadeExecucao, DiscoveryFact, DiscoverySlot, Lead,
   NecessidadeTipo, SdrCommercialScore, SdrPhase, SdrSignals, SdrState, ServicePackage,
 } from "./types";
-import { DISCOVERY_ORDER } from "./types";
+import { DISCOVERY_ORDER, SLOTS_DO_CHAT } from "./types";
 
-// Horizonte padrão do payback (§15: R$20.000 ÷ 6 ≈ R$3.333/mês).
+// Horizonte padrão do payback (§15 do Prompt Mestre: R$20.000 ÷ 6 ≈ R$3.333/mês).
 export const MESES_PAYBACK_PADRAO = Number(process.env.SDR_MESES_PAYBACK || 6);
+
+// Orçamento de perguntas do chat (Correção §3): 3 a 6 perguntas relevantes
+// antes de decidir se vale sugerir reunião. Não é rígido — é o ponto em que a
+// máquina para de investigar e passa a conduzir para o próximo passo.
+export const PERGUNTAS_MIN = 3;
+export const PERGUNTAS_MAX = 6;
 
 export function emptyState(origem: "inbound" | "outbound" = "outbound"): SdrState {
   const now = new Date().toISOString();
@@ -29,14 +35,23 @@ export function emptyState(origem: "inbound" | "outbound" = "outbound"): SdrStat
     signals: { necessidade: "desconhecida", capacidadeExecucao: "desconhecida" },
     leadPediuPreco: 0,
     precoRevelado: false,
+    perguntasFeitas: 0,
+    percepcaoEntregue: false,
+    turnosSoPergunta: 0,
     updatedAt: now,
   };
 }
 
 // Garante que um lead antigo (sem estado) ganhe um estado coerente.
 export function stateOf(lead: Lead): SdrState {
-  if (lead.sdr) return lead.sdr;
-  return emptyState(lead.inbound ? "inbound" : "outbound");
+  if (!lead.sdr) return emptyState(lead.inbound ? "inbound" : "outbound");
+  // estados gravados antes do orçamento de perguntas existir
+  const s = lead.sdr;
+  s.perguntasFeitas ??= 0;
+  s.percepcaoEntregue ??= false;
+  s.turnosSoPergunta ??= 0;
+  for (const slot of DISCOVERY_ORDER) s.discovery[slot] ??= { status: "desconhecido" };
+  return s;
 }
 
 const RANK: Record<DiscoveryFact["status"], number> = { desconhecido: 0, hipotese: 1, confirmado: 2 };
@@ -101,28 +116,58 @@ export function precoModo(s: SdrState): PrecoModo {
   return "bloqueado";
 }
 
+// ---- Reunião: o alvo real do chat (Correção §1, §16) ------------------------
+
+// §16 — para marcar reunião basta: problema real, alguma aderência, vontade de
+// resolver e possibilidade razoável de contratação. NÃO exige causa, impacto
+// quantificado, capacidade, decisor nem critério: isso é assunto da reunião.
+export function podeAgendar(s: SdrState): boolean {
+  const d = s.discovery;
+  const sig = s.signals;
+  const problemaReal = confirmed(d.problema) || sig.problemaReal === true;
+  const aderencia = sig.aderencia !== false; // só barra se explicitamente sem aderência
+  const vontade = known(d.prioridade) || sig.vontadeResolver === true;
+  const possivel = sig.possibilidadeContratacao !== false;
+  return problemaReal && aderencia && vontade && possivel && s.percepcaoEntregue;
+}
+
+// O chat já colheu o que precisava? (as 4 camadas da §4)
+export function camadasDoChatCompletas(s: SdrState): boolean {
+  return SLOTS_DO_CHAT.every((slot) => known(s.discovery[slot]));
+}
+
+// Estourou o orçamento de perguntas (§3) ou o lead cansou (§9)? Nos dois casos
+// a máquina para de investigar e vai para o próximo passo.
+export function deveEncerrarDescoberta(s: SdrState): boolean {
+  return s.fadigaDetectada === true || s.perguntasFeitas >= PERGUNTAS_MAX;
+}
+
 // ---- Fase (derivada, nunca informada pelo modelo) ---------------------------
 
 export function computePhase(s: SdrState): SdrPhase {
   const d = s.discovery;
-  if (!known(d.situacao) && !known(d.problema)) return "abertura";
-  if (!confirmed(d.situacao) || !confirmed(d.problema)) return "descoberta";
-  if (!known(d.causa) || !confirmed(d.impacto)) return "diagnostico";
-  if (!podeRecomendarOferta(s)) return "business_case";
-  if (!s.ofertaRecomendada) return "recomendacao";
-  return "fechamento";
+  // O lead puxou preço/oferta: sai do trilho do chat.
+  if (podeRecomendarOferta(s)) return s.ofertaRecomendada ? "recomendacao" : "diagnostico_profundo";
+
+  // Cansou ou estourou o orçamento → conduzir ao próximo passo, sem mais roteiro.
+  if (deveEncerrarDescoberta(s)) return "proximo_passo";
+  if (podeAgendar(s)) return "proximo_passo";
+
+  if (!known(d.motivo) && !known(d.problema)) return "abertura";
+  if (!known(d.motivo)) return "motivo";
+  if (!confirmed(d.problema)) return "dor";
+  if (!known(d.situacao)) return "contexto";
+  if (!s.percepcaoEntregue) return "percepcao"; // §7/§18: uma leitura útil ANTES do convite
+  return "fit";
 }
 
-// A ÚNICA coisa que falta descobrir agora (§39: uma pergunta por vez).
+// A ÚNICA coisa que falta descobrir agora (uma pergunta por vez).
+// §17 (princípio de compressão): se dá pra conduzir sem saber, não pergunta —
+// por isso só perseguimos os slots do CHAT. O resto fica pra reunião.
 export function proximoSlot(s: SdrState): DiscoverySlot | null {
-  for (const slot of DISCOVERY_ORDER) {
-    if (!confirmed(s.discovery[slot])) {
-      // causa aceita hipótese (§6) — se já temos hipótese, seguimos pro impacto
-      if (slot === "causa" && known(s.discovery.causa)) continue;
-      // prioridade/capacidade/decisão/critério não precisam de prova documental
-      if (["prioridade", "capacidade", "decisao", "criterio"].includes(slot) && known(s.discovery[slot])) continue;
-      return slot;
-    }
+  if (deveEncerrarDescoberta(s)) return null;
+  for (const slot of SLOTS_DO_CHAT) {
+    if (slot === "problema" ? !confirmed(s.discovery[slot]) : !known(s.discovery[slot])) return slot;
   }
   return null;
 }
@@ -131,23 +176,25 @@ export function proximoSlot(s: SdrState): DiscoverySlot | null {
 // é a pergunta que pode ser dita AO LEAD (2ª pessoa). Misturar as duas fazia a
 // resposta de segurança sair com "…com os números deles" na cara do cliente.
 export const PERGUNTA_DO_SLOT: Record<DiscoverySlot, string> = {
-  situacao: "o que vocês vendem hoje, por onde vendem e qual é o tamanho aproximado da operação",
-  problema: "o que especificamente não está funcionando — onde a operação trava",
-  causa: "o que está provocando isso (não basta 'está ruim')",
-  impacto: "quanto isso custa por mês em dinheiro, margem, estoque ou caixa — com os números do próprio lead",
-  prioridade: "se resolver isso é prioridade para agora ou para o segundo semestre",
-  capacidade: "quem executaria internamente e se há capital/equipe para tocar o projeto",
-  decisao: "quem decide, quem influencia e quem pode barrar",
-  criterio: "o que vai pesar na decisão: retorno, prazo, risco ou confiança em quem executa",
+  motivo: "o que fez o lead procurar a gente (a intenção real por trás do contato)",
+  problema: "qual é a dor PRINCIPAL — uma só, a que mais incomoda hoje",
+  situacao: "contexto leve: já vende? em quais canais? está sozinho ou tem equipe? tem volume?",
+  prioridade: "se ele quer resolver isso agora",
+  causa: "o que está provocando isso — NA REUNIÃO, não no chat",
+  impacto: "quanto custa — só se o número mudar a decisão (§13); senão, fica pra reunião",
+  capacidade: "quem executa — assunto de reunião",
+  decisao: "quem decide — assunto de reunião",
+  criterio: "o que pesa na decisão — assunto de reunião",
 };
 
 // Como perguntar isso AO LEAD, na segunda pessoa.
 export const PERGUNTA_AO_LEAD: Record<DiscoverySlot, string> = {
-  situacao: "o que vocês vendem hoje e por onde vendem?",
-  problema: "o que especificamente não está funcionando aí — onde a operação trava?",
+  motivo: "o que te fez procurar a gente?",
+  problema: "o que hoje mais está te incomodando nessa operação?",
+  situacao: "hoje você já vende em algum canal, e está tocando isso sozinho ou tem equipe?",
+  prioridade: "isso é algo que vocês querem resolver agora?",
   causa: "o que você acha que está provocando isso?",
-  impacto: "quanto isso custa por mês pra vocês, em margem, estoque parado ou venda que deixa de acontecer?",
-  prioridade: "resolver isso é prioridade pra agora ou é assunto do segundo semestre?",
+  impacto: "quanto isso pesa hoje pra vocês?",
   capacidade: "quem tocaria isso internamente hoje?",
   decisao: "além de você, quem mais entra nessa decisão?",
   criterio: "o que vai pesar mais na decisão: retorno, prazo, risco ou confiança em quem executa?",
@@ -309,11 +356,22 @@ export function scoreFromState(s: SdrState, lead?: Lead): SdrCommercialScore {
 // ---- Resumo legível (usado no prompt e no painel) ---------------------------
 
 export function resumoEstado(s: SdrState): string {
-  const linhas: string[] = [];
-  for (const slot of DISCOVERY_ORDER) {
+  const linhas: string[] = ["CAMADAS DO CHAT (o que você precisa aqui):"];
+  const render = (slot: DiscoverySlot) => {
     const f = s.discovery[slot];
     const marca = f.status === "confirmado" ? "✔ CONFIRMADO" : f.status === "hipotese" ? "~ HIPÓTESE" : "✗ desconhecido";
-    linhas.push(`- ${slot}: ${marca}${f.valor ? ` — ${f.valor}` : ""}`);
+    return `- ${slot}: ${marca}${f.valor ? ` — ${f.valor}` : ""}`;
+  };
+  for (const slot of SLOTS_DO_CHAT) linhas.push(render(slot));
+  const daReuniao = DISCOVERY_ORDER.filter((x) => !SLOTS_DO_CHAT.includes(x) && known(s.discovery[x]));
+  if (daReuniao.length) {
+    linhas.push("O lead ofereceu espontaneamente (não persiga o resto — é da reunião):");
+    for (const slot of daReuniao) linhas.push(render(slot));
   }
+  linhas.push(
+    `ORÇAMENTO: ${s.perguntasFeitas} pergunta(s) de descoberta feitas (alvo: ${PERGUNTAS_MIN}-${PERGUNTAS_MAX}).` +
+    ` Percepção útil entregue: ${s.percepcaoEntregue ? "SIM" : "AINDA NÃO"}.` +
+    (s.fadigaDetectada ? " ⚠ O LEAD DEU SINAL DE CANSAÇO." : ""),
+  );
   return linhas.join("\n");
 }

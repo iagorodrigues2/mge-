@@ -16,11 +16,14 @@ import type {
 } from "./types";
 import { DISCOVERY_ORDER } from "./types";
 import {
-  buildBusinessCase, computePhase, escolherOferta, known, MESES_PAYBACK_PADRAO,
-  mergeDiscovery, PERGUNTA_DO_SLOT, podeEscalarFechamento, podeMontarBusinessCase,
-  podeRecomendarOferta, precoModo, proximoSlot, resumoEstado, scoreFromState, stateOf,
+  buildBusinessCase, camadasDoChatCompletas, computePhase, escolherOferta, MESES_PAYBACK_PADRAO,
+  mergeDiscovery, PERGUNTA_DO_SLOT, PERGUNTAS_MAX, podeAgendar, podeEscalarFechamento,
+  podeMontarBusinessCase, precoModo, proximoSlot, resumoEstado, scoreFromState, stateOf,
 } from "./sdr-state";
-import { checarResposta, corrigirIdentidade, respostaDeSeguranca, valoresCitados } from "./sdr-guards";
+import {
+  checarResposta, contaPerguntas, corrigirIdentidade, detectaFadiga,
+  respostaDeSeguranca, semSaudacoes, valoresCitados,
+} from "./sdr-guards";
 
 const AGENDA_URL = process.env.AGENDA_URL || ""; // link de agendamento do Iago, se houver
 
@@ -106,18 +109,36 @@ Só cite número que (a) o próprio lead te deu, ou (b) veio do catálogo oficia
 
 HIPÓTESE ≠ DIAGNÓSTICO: com poucos dados, fale em hipótese ("pode existir um descasamento entre giro, pagamento de fornecedor e recebimento — precisamos entender onde isso acontece"), nunca como fato ("seu problema é X"). Nunca declare como comprovado o que não foi comprovado.`;
 
-const CONVERSA = `COMO CONDUZIR:
-- UMA pergunta relevante por vez. Cada resposta determina a próxima pergunta. Nada de "qual faturamento, margem, estoque, ciclo e quem decide?" — isso é formulário, não conversa.
-- Nem toda mensagem precisa terminar em pergunta. Às vezes reconheça, explique, entregue valor e deixe a conversa respirar.
-- Mensagens curtas, um tema por vez. Texto longo só quando o lead pedir explicação, escopo, proposta, comparação ou perguntar quem é o Iago.
-- NUNCA pergunte de novo algo que o lead já respondeu. Use o que ele disse: "considerando os R$150 mil que você comentou…".
-- NÃO aceite a premissa do cliente. Se ele diz "preciso vender mais", investigue se o gargalo é venda mesmo — vender mais às vezes piora caixa e margem. Tenha coragem de contrariar com fundamento.
-- Faturamento sozinho NÃO qualifica. R$150 mil/mês pode ser negócio ótimo ou péssimo. Investigue margem, estoque médio, giro, ciclo de compra, prazo de reposição, capital imobilizado, prazo do fornecedor, prazo de recebimento e custo financeiro.
-- Se envolver importação, olhe o ciclo inteiro: pedido → pagamento → produção → embarque → trânsito → nacionalização → estoque → venda → recebimento → reposição. Não assuma que o marketplace é o problema; pode ser compra, estoque, prazo, margem ou estrutura financeira.
-- Pergunta estratégica útil: "hoje alguém olha de forma integrada para vendas, giro, estoque, importação e caixa, ou cada área decide separado?".
-- Se perguntarem "não conheço o Iago": a pergunta real é "por que eu confiaria minha empresa e meu dinheiro a ele?". Responda com experiência RELEVANTE para o problema dele, não com currículo despejado. Nunca invente prova.
-- Quem executa: "o diagnóstico, o desenho da estratégia e as decisões centrais são conduzidos diretamente pelo Iago; a execução pode envolver a equipe dele e a do cliente conforme o escopo". Nunca prometa que o Iago faz tudo pessoalmente.
-- Demonstre competência sem entregar a consultoria de graça: identifique, levante hipótese, quantifique e mostre direção. A implementação detalhada pertence ao serviço.`;
+const CONVERSA = `O CHAT NÃO É A CONSULTORIA — REGRA QUE TEM PRECEDÊNCIA SOBRE TODO O RESTO.
+Seu objetivo aqui NÃO é diagnosticar a empresa inteira. É: entender por que o lead chegou, identificar a DOR PRINCIPAL, pegar o contexto mínimo, verificar se existe fit, ENTREGAR UMA PERCEPÇÃO ÚTIL, criar confiança e conduzir para uma conversa com o Iago quando fizer sentido. O diagnóstico profundo acontece NA REUNIÃO.
+
+NÃO MONTE A DRE PELO WHATSAPP. É proibido sair perguntando em sequência faturamento, margem, preço, custo, comissão, imposto, frete, estoque, giro, prazo, capital e ROI antes de marcar reunião. Isso é auditoria financeira, não conversa. Pergunte número SOMENTE quando ele for necessário para entender a dor ou verificar fit.
+
+ORÇAMENTO DE PERGUNTAS: normalmente 3 a 6 perguntas relevantes antes de decidir se vale sugerir a reunião. Não faça uma pergunta só porque a informação seria interessante — faça se ela for necessária para decidir a PRÓXIMA AÇÃO.
+
+PRINCÍPIO DA COMPRESSÃO: antes de cada pergunta, se pergunte "se eu não souber isso agora, ainda consigo conduzir a conversa corretamente?". Se sim, NÃO pergunte. E quando se pegar perguntando custo unitário, percentual, centavos, taxa específica ou detalhe de integração, pare: leve para a reunião.
+
+ENTREGUE VALOR ENTRE AS PERGUNTAS. Nunca pergunta → pergunta → pergunta. O ritmo é: pergunta → resposta → PERCEPÇÃO → próxima pergunta. A percepção é curta, útil, baseada no que você já sabe, e deixa claro quando é hipótese. Exemplo: o lead diz "tenho poucos produtos e poucas vendas" → "Eu teria cuidado pra não concluir que falta venda só porque falta tráfego. Em operação pequena, mix, competitividade e estrutura do anúncio costumam precisar ser verificados antes de colocar mais produto. Desses pontos, onde você sente que está mais perdido?".
+
+UMA DOR PRINCIPAL POR VEZ. Se o lead citar vários problemas: "desses pontos, qual hoje mais te incomoda?". Não investigue todos ao mesmo tempo — a reunião abre as outras camadas.
+
+DÊ UMA BREVE LUZ antes da reunião, sempre que houver informação suficiente. Ex.: "pelo que você descreveu, eu não aumentaria catálogo ou Ads ainda; primeiro verificaria se produto, margem e estrutura do anúncio estão corretos, senão você escala o problema junto." Isso mostra competência sem entregar a consultoria inteira.
+
+SE O LEAD DER SINAL DE CANSAÇO ("onde você quer chegar?", "muita pergunta", "vai direto ao ponto", ou respostas curtas/confusas): PARE o roteiro imediatamente. Diga "tem razão, fui longe demais nos detalhes, vou direto ao ponto", resuma o que entendeu, dê uma percepção, explique por que a conversa com o Iago pode (ou não) fazer sentido e ofereça o próximo passo.
+
+NÃO TENHA MEDO DE MARCAR A REUNIÃO SEM SABER TUDO. Você precisa apenas de: problema real, alguma aderência com o que o Iago faz, vontade de resolver e possibilidade razoável de contratação. A reunião é o lugar de aprofundar.
+
+O lead tem que sair pensando "ele entendeu rápido", não "estou preenchendo um formulário". Menos perguntas, melhores perguntas, mais compreensão, uma pequena entrega de valor, reunião no momento certo. Você não prova inteligência fazendo vinte perguntas — prova identificando rápido quais duas ou três realmente importam.
+
+OUTRAS REGRAS DE CONDUÇÃO:
+- UMA pergunta por vez. Cada resposta determina a próxima.
+- Nem toda mensagem precisa terminar em pergunta. Reconhecer, explicar e deixar respirar também é conduzir.
+- Mensagens curtas. Texto longo só se o lead pedir explicação, escopo, proposta, comparação ou perguntar quem é o Iago.
+- NUNCA pergunte de novo o que ele já respondeu. Use o que ele disse: "considerando o que você comentou sobre X…".
+- NÃO aceite a premissa automaticamente. Se ele diz "preciso vender mais", vale checar se o gargalo é venda mesmo — mas faça isso com UMA pergunta bem escolhida, não com uma bateria.
+- NÃO NICHE O IAGO ARTIFICIALMENTE. Não diga "o Iago é especialista em moda" só porque o lead é de moda. O posicionamento é: implantação e escala de operações de marketplace, conectando venda, margem, estoque, logística e operação. Depois adapte exemplos ao setor dele.
+- Se perguntarem "não conheço o Iago": responda com experiência RELEVANTE para o problema dele, não com currículo despejado. Nunca invente prova.
+- Quem executa: "o diagnóstico, a estratégia e as decisões centrais são conduzidos pelo Iago; a execução pode envolver a equipe dele e a do cliente conforme o escopo". Nunca prometa que ele faz tudo pessoalmente.`;
 
 const OBJECOES = `OBJEÇÕES — nunca ataque, investigue o que ela significa:
 - "Está caro" → "Caro comparado a quê: ao orçamento previsto, ao retorno esperado ou a outra alternativa que vocês estão avaliando?"
@@ -152,21 +173,35 @@ function blocoFase(state: SdrState, pacotes: ServicePackage[]): string {
   if (state.phase === "abertura") {
     linhas.push(
       state.origem === "inbound"
-        ? `ESTE LEAD VEIO ATÉ NÓS (inbound): ele já demonstrou interesse. NÃO faça prospecção fria. A primeira coisa a descobrir é a intenção real: "o que te fez procurar a gente?".`
-        : `NÓS procuramos este lead (outbound): a primeira mensagem precisa mostrar MOTIVO REAL do contato, nesta estrutura: contexto → observação verdadeira sobre a empresa dele → hipótese → uma pergunta curta e fácil de responder. A primeira mensagem vende a PRÓXIMA RESPOSTA, não o programa. Curta, específica, individual, contextual. PROIBIDO: "gostaria de apresentar nossos serviços", "somos especialistas em marketplace", "podemos agendar 30 minutos?", "tenho uma solução para sua empresa", "espero que esta mensagem te encontre bem", "oi, tudo bem?" isolado e elogio genérico.`,
+        ? `ESTE LEAD VEIO ATÉ NÓS (inbound): ele já demonstrou interesse. NÃO faça prospecção fria e NÃO faça apresentação institucional longa. Seja direto e descubra a INTENÇÃO primeiro. Se ele só disse "boa tarde", responda algo como "Boa tarde! Tudo bem? O que te fez procurar o Iago?". Se você souber a origem: "Vi que você chegou pelo Instagram. O que você está querendo melhorar hoje na sua operação?". Só apresente o Iago DEPOIS, no contexto da necessidade que ele trouxer.`
+        : `NÓS procuramos este lead (outbound): a primeira mensagem precisa mostrar MOTIVO REAL do contato, nesta estrutura: contexto → observação verdadeira sobre a empresa dele → hipótese → uma pergunta curta e fácil de responder. A primeira mensagem vende a PRÓXIMA RESPOSTA, não o programa. PROIBIDO: "gostaria de apresentar nossos serviços", "somos especialistas em marketplace", "podemos agendar 30 minutos?", "tenho uma solução para sua empresa", "espero que esta mensagem te encontre bem", "oi, tudo bem?" isolado e elogio genérico.`,
     );
   }
 
-  if (slot) {
-    linhas.push(`SUA MISSÃO NESTE TURNO: descobrir ${PERGUNTA_DO_SLOT[slot]}. Faça UMA pergunta sobre isso (encadeada no que ele acabou de dizer, não solta).`);
+  const CAMADA: Partial<Record<string, string>> = {
+    motivo: `CAMADA 1 — MOTIVO. Descubra o que fez ele procurar a gente. É a pergunta que mais rápido revela a intenção real.`,
+    dor: `CAMADA 2 — DOR PRINCIPAL. Descubra o que mais está incomodando na operação. Se ele citar vários problemas, escolha: "desses pontos, qual hoje mais te incomoda?". UMA dor por vez.`,
+    contexto: `CAMADA 3 — CONTEXTO. Uma ou duas perguntas leves, nada de auditoria: já vende? em quais canais? está sozinho ou tem equipe? a operação está começando ou já tem volume?`,
+    percepcao: `VOCÊ JÁ TEM O SUFICIENTE PARA ENTREGAR VALOR. Neste turno, NÃO faça mais uma pergunta de descoberta: dê uma PERCEPÇÃO ÚTIL sobre o que ele contou (curta, honesta, marcando o que é hipótese). Só depois, se couber, uma pergunta leve.`,
+    fit: `CAMADA 4/5 — PRIORIDADE E FIT. Falta saber se ele quer resolver isso AGORA e se existe estrutura/problema compatível com o trabalho do Iago. Uma pergunta só.`,
+  };
+  if (CAMADA[state.phase]) linhas.push(CAMADA[state.phase]!);
+
+  if (slot && state.phase !== "percepcao" && state.phase !== "proximo_passo") {
+    linhas.push(`O QUE FALTA DESCOBRIR: ${PERGUNTA_DO_SLOT[slot]}. Uma pergunta só, encadeada no que ele acabou de dizer.`);
   }
 
-  if (state.phase === "diagnostico") {
-    linhas.push(`Você já sabe o que dói. Agora precisa da CAUSA e do IMPACTO EM DINHEIRO. Não aceite "está ruim": pergunte o que provoca isso e quanto custa por mês (margem, giro, estoque parado, capital imobilizado, custo financeiro, venda perdida). Sem impacto quantificado NÃO existe recomendação.`);
+  if (state.phase === "proximo_passo") {
+    if (state.fadigaDetectada) {
+      linhas.push(`⚠ O LEAD SINALIZOU CANSAÇO. Pare o roteiro AGORA. Reconheça ("tem razão, fui longe demais nos detalhes, vou direto ao ponto"), resuma o que você entendeu, dê uma percepção e explique por que a conversa com o Iago faz (ou não) sentido. NÃO faça nova pergunta de descoberta.`);
+    } else if (state.perguntasFeitas >= PERGUNTAS_MAX) {
+      linhas.push(`Você já fez ${state.perguntasFeitas} perguntas — chega de investigar. Resuma, dê a percepção e conduza ao próximo passo.`);
+    }
+    linhas.push(`HORA DO PRÓXIMO PASSO. Escolha: (a) sugerir a conversa com o Iago, (b) dar uma orientação simples e deixar a porta aberta, (c) nutrir, ou (d) desqualificar com honestidade. Se for a reunião, convide assim: "pelo que você está me contando, acho que vale o Iago olhar isso com você. Antes de qualquer contratação ele consegue entender a operação e dizer o que realmente precisa ser corrigido — inclusive se não fizer sentido um projeto nosso agora."`);
   }
 
-  if (state.phase === "business_case" && podeMontarBusinessCase(state)) {
-    linhas.push(`Você tem diagnóstico. Agora CONSTRUA A CONTA COM OS NÚMEROS DELE antes de qualquer produto. Falta saber: ${!known(state.discovery.prioridade) ? "se isso é prioridade agora" : ""}${!known(state.discovery.prioridade) && !known(state.discovery.capacidade) ? " e " : ""}${!known(state.discovery.capacidade) ? "quem executaria e se há capital/equipe" : ""}.`);
+  if (state.phase === "diagnostico_profundo") {
+    linhas.push(`O lead está puxando para oferta/preço. Você pode aprofundar UM pouco mais aqui, mas o lugar do diagnóstico completo continua sendo a reunião. Não abra a conta inteira da empresa por mensagem.`);
   }
 
   // ---- Preço e catálogo: o gate central --------------------------------------
@@ -226,16 +261,20 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
 {
   "reply": "a mensagem curta que você envia ao lead",
   "descobertas": {
-    "situacao":   {"status": "desconhecido|hipotese|confirmado", "valor": "o que o lead disse, resumido"},
-    "problema":   {"status": "...", "valor": "..."},
-    "causa":      {"status": "...", "valor": "..."},
-    "impacto":    {"status": "...", "valor": "..."},
-    "prioridade": {"status": "...", "valor": "..."},
-    "capacidade": {"status": "...", "valor": "..."},
-    "decisao":    {"status": "...", "valor": "..."},
-    "criterio":   {"status": "...", "valor": "..."}
+    "motivo":     {"status": "desconhecido|hipotese|confirmado", "valor": "por que ele procurou a gente"},
+    "problema":   {"status": "...", "valor": "a dor PRINCIPAL"},
+    "situacao":   {"status": "...", "valor": "contexto leve: canais, equipe, volume"},
+    "prioridade": {"status": "...", "valor": "quer resolver agora?"},
+    "causa":      {"status": "...", "valor": "só se ELE contou espontaneamente"},
+    "impacto":    {"status": "...", "valor": "só se ELE contou espontaneamente"}
   },
+  "percepcao_entregue": true se NESTA mensagem você entregou uma leitura/orientação útil (não só pergunta),
+  "fez_pergunta_descoberta": true se NESTA mensagem você fez uma pergunta para descobrir algo novo,
   "sinais": {
+    "problema_real": true|false|null,
+    "aderencia": true|false|null,
+    "vontade_resolver": true|false|null,
+    "possibilidade_contratacao": true|false|null,
     "necessidade": "clareza|direcao|montar_operacao|escala_continua|nenhuma|desconhecida",
     "capacidade_execucao": "tem_equipe|parcial|sem_equipe|desconhecida",
     "impacto_mensal_estimado": número em R$/mês derivado DOS NÚMEROS DO LEAD, ou null,
@@ -244,6 +283,8 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
   "action": "continuar|agendar|handoff_fechamento|sem_fit|nao_interessado|opt_out",
   "motivo": "1-2 frases pro Iago explicando a decisão (e o risco, se escalar)"
 }
+
+NÃO persiga causa, impacto, capacidade, decisão e critério no chat — preencha esses slots SOMENTE se o lead falar por conta própria. Eles são da reunião.
 
 REGRAS DO CAMPO "descobertas": só marque "confirmado" o que o LEAD efetivamente disse — o que você deduziu é "hipotese". Envie apenas os slots que mudaram neste turno. Nunca marque confirmado sem preencher "valor".
 REGRAS DO "impacto_mensal_estimado": só preencha se der para derivar dos números que o lead deu. Na dúvida, null. Nunca estime por benchmark.
@@ -282,6 +323,17 @@ interface ParsedTurn {
   capacidadeExecucao: CapacidadeExecucao;
   impactoMensal?: number;
   riscos: string[];
+  percepcaoEntregue: boolean;
+  fezPergunta: boolean;
+  problemaReal?: boolean;
+  aderencia?: boolean;
+  vontadeResolver?: boolean;
+  possibilidadeContratacao?: boolean;
+}
+
+// tri-estado: true / false / indefinido (o modelo pode mandar null)
+function bool3(v: unknown): boolean | undefined {
+  return typeof v === "boolean" ? v : undefined;
 }
 
 function parseTurn(raw: string): ParsedTurn {
@@ -289,7 +341,7 @@ function parseTurn(raw: string): ParsedTurn {
   const jsonStr = m ? m[0] : raw;
   const vazio: ParsedTurn = {
     reply: raw.trim(), action: "continuar", necessidade: "desconhecida",
-    capacidadeExecucao: "desconhecida", riscos: [],
+    capacidadeExecucao: "desconhecida", riscos: [], percepcaoEntregue: false, fezPergunta: true,
   };
   try {
     const o = JSON.parse(jsonStr) as Record<string, unknown>;
@@ -301,9 +353,10 @@ function parseTurn(raw: string): ParsedTurn {
     const nec = sinais.necessidade as NecessidadeTipo;
     const cap = sinais.capacidade_execucao as CapacidadeExecucao;
     const imp = Number(sinais.impacto_mensal_estimado);
+    const reply = String(o.reply ?? "").trim();
 
     return {
-      reply: String(o.reply ?? "").trim(),
+      reply,
       action: ACTIONS.includes(o.action as SdrAction) ? (o.action as SdrAction) : "continuar",
       motivo: o.motivo ? String(o.motivo) : undefined,
       descobertas: limpo,
@@ -311,10 +364,25 @@ function parseTurn(raw: string): ParsedTurn {
       capacidadeExecucao: CAPACIDADES.includes(cap) ? cap : "desconhecida",
       impactoMensal: isFinite(imp) && imp > 0 ? imp : undefined,
       riscos: Array.isArray(sinais.riscos) ? (sinais.riscos as unknown[]).map(String).filter(Boolean) : [],
+      // o autorrelato do modelo é conferido contra o texto: se a mensagem é só
+      // pergunta, não houve percepção, ele dizendo que sim ou não.
+      percepcaoEntregue: o.percepcao_entregue === true && !ehSoPergunta(reply),
+      fezPergunta: o.fez_pergunta_descoberta === true || contaPerguntas(reply) > 0,
+      problemaReal: bool3(sinais.problema_real),
+      aderencia: bool3(sinais.aderencia),
+      vontadeResolver: bool3(sinais.vontade_resolver),
+      possibilidadeContratacao: bool3(sinais.possibilidade_contratacao),
     };
   } catch {
     return vazio;
   }
+}
+
+// A mensagem é só uma pergunta jogada, sem reconhecer nem entregar nada?
+// Heurística: tira saudações e perguntas, e vê se sobrou conteúdo relevante.
+export function ehSoPergunta(reply: string): boolean {
+  const resto = semSaudacoes(reply).replace(/[^.!?]*\?/g, "").trim();
+  return resto.length < 40;
 }
 
 // O lead está perguntando preço? (destrava o modo "referencia_com_conta")
@@ -331,6 +399,9 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   const pacotes = await listPackages();
   const state = stateOf(lead);
   if (pediuPreco(incoming)) state.leadPediuPreco = (state.leadPediuPreco ?? 0) + 1;
+  // §9 — cansaço é irreversível na conversa: uma vez sinalizado, não voltamos
+  // a interrogar mesmo que o lead responda bem depois.
+  if (detectaFadiga(incoming)) state.fadigaDetectada = true;
   state.phase = computePhase(state);
 
   const historico: ConversationMsg[] = lead.conversation ?? [];
@@ -370,6 +441,7 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
       state, reply: p.reply, historico, incoming,
       primeiraMensagem: historico.filter((h) => h.role === "ia").length === 0,
       precosPermitidos: permitidos,
+      soPergunta: ehSoPergunta(p.reply),
     });
     parsed = p;
     violacoes = g.violacoes;
@@ -440,7 +512,16 @@ function aplicarEstado(state: SdrState, p: ParsedTurn, pacotes: ServicePackage[]
     capacidadeExecucao: p.capacidadeExecucao !== "desconhecida" ? p.capacidadeExecucao : state.signals.capacidadeExecucao,
     impactoMensalEstimado: p.impactoMensal ?? state.signals.impactoMensalEstimado,
     riscos: p.riscos.length ? p.riscos : state.signals.riscos,
+    problemaReal: p.problemaReal ?? state.signals.problemaReal,
+    aderencia: p.aderencia ?? state.signals.aderencia,
+    vontadeResolver: p.vontadeResolver ?? state.signals.vontadeResolver,
+    possibilidadeContratacao: p.possibilidadeContratacao ?? state.signals.possibilidadeContratacao,
   };
+
+  // Orçamento de perguntas e ritmo (Correção §3, §6, §7).
+  if (p.fezPergunta) state.perguntasFeitas += 1;
+  if (p.percepcaoEntregue) state.percepcaoEntregue = true;
+  state.turnosSoPergunta = ehSoPergunta(p.reply) ? state.turnosSoPergunta + 1 : 0;
   if (p.riscos.length) state.riscos = Array.from(new Set([...(state.riscos ?? []), ...p.riscos]));
 
   // Business case: só existe com diagnóstico fechado. É recalculado sempre que
@@ -475,14 +556,20 @@ function aplicarEstado(state: SdrState, p: ParsedTurn, pacotes: ServicePackage[]
 }
 
 // Barra ações que a máquina considera prematuras — a decisão é do sistema.
+// O alvo do chat é a REUNIÃO (Correção §1/§16), então `agendar` é barato:
+// exige problema real + aderência + vontade + possibilidade + uma percepção
+// entregue. Já o `handoff_fechamento` (fechar venda) continua caro.
 function ajustarAcao(acao: SdrAction, state: SdrState): SdrAction {
   if (acao === "opt_out" || acao === "nao_interessado") return acao; // o lead mandou; respeita sempre
+
   if (acao === "handoff_fechamento" && !podeEscalarFechamento(state)) {
-    // Quer fechar mas o diagnóstico não fechou: agenda a conversa em vez de
-    // jogar um lead cru no colo do Iago.
-    return podeRecomendarOferta(state) ? "agendar" : "continuar";
+    // Não dá pra fechar ainda — mas se dá pra marcar a reunião, marque: é lá
+    // que o diagnóstico acontece.
+    return podeAgendar(state) ? "agendar" : "continuar";
   }
-  if (acao === "sem_fit" && !podeMontarBusinessCase(state)) return "continuar"; // desqualificar exige diagnóstico
+  // Desqualificar não exige business case: basta ter percorrido as camadas do
+  // chat e concluído que não há aderência (§4).
+  if (acao === "sem_fit" && !camadasDoChatCompletas(state) && state.signals.aderencia !== false) return "continuar";
   return acao;
 }
 

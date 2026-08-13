@@ -27,45 +27,94 @@ boas oportunidades em **dinheiro efetivamente recebido**.
 
 ---
 
-## A mudança central: diagnosticar antes de prescrever (§5, §15, §21)
+## ⚠ Correção Prioritária — o chat NÃO é a consultoria
 
-O agente **não** pode "achar uma dor e encaixar R$20 mil". Isso não é uma
-instrução de redação — é um bloqueio de execução:
+Documento "CORREÇÃO PRIORITÁRIA — DISCOVERY COMERCIAL" (19 seções). **Tem
+precedência sobre qualquer regra anterior que leve a interrogatório ou a
+diagnóstico profundo no chat.**
+
+O alvo do WhatsApp deixou de ser *fechar a venda* e passou a ser **marcar a
+reunião**. O diagnóstico profundo acontece **na reunião**, não no chat.
 
 ```
-abertura → descoberta → diagnóstico → business case → recomendação → fechamento
+abertura → motivo → dor principal → contexto → percepção útil → prioridade/fit → próximo passo
 ```
 
-A fase é **calculada pelo código** (`computePhase`), não escolhida pela IA. Para
-avançar, cada slot precisa estar preenchido:
+**As 4 camadas que o chat persegue** (`SLOTS_DO_CHAT`):
 
-| Slot | O que é | §  |
+| Slot | Camada | Pergunta |
 |---|---|---|
-| `situacao` | o que vende, onde, tamanho da operação | 11-A |
-| `problema` | o que não funciona, onde trava | 11-B |
-| `causa` | o que provoca isso (não aceita "está ruim") | 11-C |
-| `impacto` | **quanto custa em R$/mês** | 11-D |
-| `prioridade` | agora ou segundo semestre | 11-E |
-| `capacidade` | capital, equipe, execução | 5 |
-| `decisao` | quem decide, influencia, barra | 11-F |
-| `criterio` | ROI, prazo, risco, confiança | 11-G |
+| `motivo` | 1 | "O que te fez procurar a gente?" |
+| `problema` | 2 | "O que hoje mais está te incomodando?" (UMA dor por vez) |
+| `situacao` | 3 | contexto leve: já vende? canais? sozinho ou equipe? |
+| `prioridade` | 4 | "Isso é algo que vocês querem resolver agora?" |
+
+`causa`, `impacto`, `capacidade`, `decisao` e `criterio` **não são perseguidos no
+chat** — só são preenchidos se o lead falar por conta própria. São assunto da
+reunião.
+
+### Orçamento de perguntas (§3, §17, §19)
+
+3 a 6 perguntas relevantes antes de decidir se vale sugerir a reunião. O estado
+conta `perguntasFeitas`; ao estourar `PERGUNTAS_MAX`, a fase vira
+`proximo_passo` e o guard barra nova investigação. Saudação ("tudo bem?") **não
+conta** como pergunta — a própria §10 prescreve "Boa tarde! Tudo bem? O que te
+fez procurar o Iago?".
+
+### Gate da reunião (§16) — barato de propósito
+
+`podeAgendar` exige apenas: **problema real + aderência + vontade de resolver +
+possibilidade razoável de contratação + uma percepção já entregue**. Não exige
+causa, impacto quantificado, capacidade nem decisor. "Não ter medo de marcar
+reunião sem saber tudo" é regra explícita.
+
+### Ritmo e valor (§6, §7, §18)
+
+Nunca pergunta → pergunta → pergunta. O ritmo é **pergunta → resposta →
+percepção → próxima pergunta**. O estado rastreia `percepcaoEntregue` e
+`turnosSoPergunta`; o guard reclama de duas perguntas secas seguidas e **barra
+convite para reunião sem nenhuma percepção entregue antes**.
+
+### Fadiga (§9)
+
+`detectaFadiga` reconhece "onde você quer chegar?", "muita pergunta", "vai
+direto ao ponto". Uma vez detectada é **irreversível** na conversa: a fase vai
+para `proximo_passo` e o guard bloqueia qualquer nova pergunta de descoberta. O
+agente tem que reconhecer, resumir, dar percepção e propor o próximo passo.
+
+### Sem auditoria financeira (§2, §12, §13)
+
+`MINUCIA_FINANCEIRA` bloqueia perguntas de margem, custo unitário, comissão,
+imposto, frete, giro, ticket médio e capital imobilizado **no chat**. Número só
+quando muda a decisão. Se o lead diz "minha margem caiu", a resposta certa é
+*"você sente que o problema está na precificação, nos custos do marketplace ou
+no mix?"* — não uma bateria de perguntas contábeis.
+
+---
+
+## Diagnosticar antes de prescrever (Prompt Mestre §5, §15, §21)
+
+Continua valendo **para a oferta**: o agente não pode "achar uma dor e encaixar
+R$20 mil". Só que agora isso raramente acontece no chat — acontece depois da
+reunião.
 
 Cada slot tem status `desconhecido → hipotese → confirmado`. **Hipótese nunca é
 tratada como fato** (§6), e o estado nunca regride — o que o lead já respondeu
 não vira dúvida de novo (§38).
 
-### Os três gates
+### Os gates
 
 1. **`precoModo`** — enquanto o diagnóstico não fecha, o catálogo com preços
    **não entra no contexto do modelo**. Ele não pode ancorar um valor que nunca
    recebeu. Se o lead perguntar preço antes da hora, destrava o modo
    `referencia_com_conta`: dá o valor de referência **obrigatoriamente amarrado à
    conta do §15**, e volta para a descoberta.
-2. **`podeRecomendarOferta`** — exige diagnóstico + impacto quantificado +
-   business case + prioridade + capacidade.
-3. **`podeEscalarFechamento`** — só chama o Iago sabendo quem decide (§24, §30).
-   Se a IA tentar dar handoff antes disso, o código rebaixa a ação para `agendar`
-   ou `continuar`.
+2. **`podeAgendar`** — barato (ver acima). É o alvo normal do chat.
+3. **`podeRecomendarOferta`** — caro: exige diagnóstico + impacto quantificado +
+   business case + prioridade + capacidade. Normalmente só depois da reunião.
+4. **`podeEscalarFechamento`** — só chama o Iago para FECHAR sabendo quem decide
+   (§24, §30). Se a IA tentar handoff antes, o código rebaixa para `agendar`
+   (se der) ou `continuar`.
 
 ### O business case manda no produto (§15)
 
@@ -205,6 +254,12 @@ têm precedência; as antigas foram removidas:
 
 | Antigo | Por que conflitava | O que passou a valer |
 |---|---|---|
+| **Gate exigia `impacto` quantificado em R$ antes de qualquer avanço** | Virava auditoria financeira por WhatsApp — Correção §2 e §12 | `podeAgendar` não exige impacto; números só quando mudam a decisão (§13) |
+| **Prompt mandava investigar "margem, estoque médio, giro, ciclo de compra, capital imobilizado, prazo do fornecedor, custo financeiro"** | É literalmente a lista proibida da Correção §2 | Bloqueado por `MINUCIA_FINANCEIRA`; vai para a reunião |
+| **8 slots perseguidos em sequência, sem teto de perguntas** | Interrogatório — Correção §3, §17, §19 | 4 camadas + orçamento de 3-6 perguntas |
+| **`handoff_fechamento` era o objetivo do chat** | O objetivo é a REUNIÃO — Correção §1, §16 | `agendar` virou o alvo normal e barato |
+| **Não havia noção de "entregar valor entre perguntas"** | Correção §6, §7, §18 | `percepcaoEntregue` + guard que barra convite sem percepção |
+| **Nada reagia a "vai direto ao ponto"** | Correção §9 | `detectaFadiga` corta o roteiro de forma irreversível |
 | O catálogo com preços era injetado no prompt **em todo turno** | Convidava a ancorar R$20 mil a qualquer momento — viola §21 | Catálogo só entra no contexto quando `podeRecomendarOferta` é verdadeiro |
 | `offerHint("implantacao_90")` dizia **"(oferta principal)"** | Enviesava toda conversa para o pacote de R$20 mil — viola §5 e §21 | Nenhuma oferta é "a principal" para o agente; cada uma tem critério de indicação |
 | "Modelo: *eu indicaria [oferta], o investimento é R$ X*" disponível desde o 1º turno | Prescrição sem diagnóstico — viola §5 | Só na fase `recomendacao`, com a estrutura do §33 |

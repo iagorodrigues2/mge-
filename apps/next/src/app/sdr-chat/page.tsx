@@ -13,23 +13,41 @@ const ACTION_INFO: Record<SdrAction, { label: string; color: string }> = {
 
 // A fase é calculada pela máquina, não pela IA — mostrar isso é o ponto: dá pra
 // ver que a oferta só aparece depois do diagnóstico e da conta.
+// Fluxo do chat (Correção §14). O diagnóstico profundo é da REUNIÃO.
 const FASES: { key: SdrPhase; label: string }[] = [
   { key: "abertura", label: "abertura" },
-  { key: "descoberta", label: "descoberta" },
-  { key: "diagnostico", label: "diagnóstico" },
-  { key: "business_case", label: "conta / business case" },
-  { key: "recomendacao", label: "recomendação" },
-  { key: "fechamento", label: "fechamento" },
+  { key: "motivo", label: "motivo" },
+  { key: "dor", label: "dor principal" },
+  { key: "contexto", label: "contexto" },
+  { key: "percepcao", label: "percepção útil" },
+  { key: "fit", label: "prioridade / fit" },
+  { key: "proximo_passo", label: "próximo passo" },
 ];
 
+// As 4 camadas que o chat persegue.
 const SLOT_LABEL: Record<string, string> = {
-  situacao: "Situação", problema: "Problema", causa: "Causa", impacto: "Impacto (R$)",
-  prioridade: "Prioridade", capacidade: "Capacidade", decisao: "Decisão", criterio: "Critério",
+  motivo: "Motivo do contato", problema: "Dor principal",
+  situacao: "Contexto", prioridade: "Prioridade",
+};
+
+// Só aparecem se o lead falar por conta própria — não se persegue no chat.
+const SLOT_REUNIAO: Record<string, string> = {
+  causa: "Causa", impacto: "Impacto (R$)", capacidade: "Capacidade",
+  decisao: "Decisão", criterio: "Critério",
 };
 
 interface Turn {
   action?: SdrAction;
   motivo?: string;
+}
+
+// Espelha `podeAgendar` do servidor só para o indicador da tela (§16).
+function podeAgendarUI(s: SdrState | null): boolean {
+  if (!s) return false;
+  const sig = s.signals ?? {};
+  const problemaReal = s.discovery?.problema?.status === "confirmado" || sig.problemaReal === true;
+  const vontade = s.discovery?.prioridade?.status !== "desconhecido" || sig.vontadeResolver === true;
+  return problemaReal && vontade && sig.aderencia !== false && sig.possibilidadeContratacao !== false && !!s.percepcaoEntregue;
 }
 
 export default function SdrChatPage() {
@@ -132,6 +150,30 @@ export default function SdrChatPage() {
             );
           })}
         </div>
+
+        {/* Orçamento de perguntas: o chat não é a consultoria (Correção §3/§7/§9) */}
+        <div style={{ marginTop: 10, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12 }}>
+          <span style={{ color: (state?.perguntasFeitas ?? 0) > 6 ? "var(--danger)" : "var(--muted)" }}>
+            ❓ perguntas: <b>{state?.perguntasFeitas ?? 0}</b>/6
+          </span>
+          <span style={{ color: state?.percepcaoEntregue ? "#2e9e6b" : "#d98e2b" }}>
+            💡 percepção útil: <b>{state?.percepcaoEntregue ? "entregue" : "ainda não"}</b>
+          </span>
+          <span style={{ color: podeAgendarUI(state) ? "#2e9e6b" : "var(--muted)" }}>
+            📅 pronto p/ reunião: <b>{podeAgendarUI(state) ? "sim" : "ainda não"}</b>
+          </span>
+          {state?.fadigaDetectada && <span style={{ color: "var(--danger)" }}>⚠ lead cansou — ir direto ao ponto</span>}
+        </div>
+
+        {/* O que o lead entregou de graça — não perseguimos isso no chat */}
+        {state && Object.entries(SLOT_REUNIAO).some(([s]) => state.discovery?.[s as keyof typeof state.discovery]?.status !== "desconhecido") && (
+          <div className="hint" style={{ marginTop: 8, fontSize: 12 }}>
+            🗓 o lead contou espontaneamente (fica pra reunião):{" "}
+            {Object.entries(SLOT_REUNIAO)
+              .filter(([s]) => state.discovery?.[s as keyof typeof state.discovery]?.status !== "desconhecido")
+              .map(([, l]) => l).join(", ")}
+          </div>
+        )}
 
         {bc && (
           <div style={{ marginTop: 12, padding: "9px 12px", background: "var(--panel-2)", borderRadius: 8, fontSize: 13 }}>
