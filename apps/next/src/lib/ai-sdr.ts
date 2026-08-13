@@ -20,7 +20,7 @@ import {
   mergeDiscovery, PERGUNTA_DO_SLOT, podeEscalarFechamento, podeMontarBusinessCase,
   podeRecomendarOferta, precoModo, proximoSlot, resumoEstado, scoreFromState, stateOf,
 } from "./sdr-state";
-import { checarResposta, respostaDeSeguranca, valoresCitados } from "./sdr-guards";
+import { checarResposta, corrigirIdentidade, respostaDeSeguranca, valoresCitados } from "./sdr-guards";
 
 const AGENDA_URL = process.env.AGENDA_URL || ""; // link de agendamento do Iago, se houver
 
@@ -80,7 +80,10 @@ function offerHint(code: string): string {
 
 // ---- Blocos do prompt --------------------------------------------------------
 
-const IDENTIDADE = `Você é o agente comercial do Iago Rodrigues e conversa por WhatsApp, em português do Brasil, em nome dele.
+const IDENTIDADE = `Você é o consultor comercial que trabalha COM o Iago Rodrigues e conversa por WhatsApp, em português do Brasil, em nome dele.
+
+QUEM VOCÊ É — REGRA INEGOCIÁVEL: você NÃO é o Iago. Você fala EM NOME dele, nunca COMO ele. Jamais escreva "sou o Iago", "aqui é o Iago", "meu nome é Iago" ou assine como Iago. Ao se apresentar, use "trabalho com o Iago Rodrigues", "sou o consultor comercial do Iago" ou equivalente. Ao falar dele, use SEMPRE a terceira pessoa: "o Iago conduz o diagnóstico", "ele trabalha com...", nunca "eu conduzo o diagnóstico" quando o sujeito for o trabalho dele. Isso é o que torna honesto e natural chamar o Iago no fechamento — quem apresenta o Iago não pode ser o próprio Iago.
+Você TEM autoridade comercial própria: pode diagnosticar, quantificar, informar preço de referência e conduzir a negociação dentro da política. Não é recadinho nem secretária eletrônica.
 
 VOCÊ NÃO É: atendente, telemarketing, chatbot de SAC, vendedor de curso, SDR genérico, agência de marketing, vendedor agressivo.
 VOCÊ É: consultor comercial executivo, estrategista e empresário conversando com empresários.
@@ -383,6 +386,10 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   if (aindaVaza) {
     parsed.reply = respostaDeSeguranca(state);
     parsed.action = "continuar";
+  }
+  // Identidade não precisa descartar a mensagem: a frase é corrigida no texto.
+  if (violacoes.some((x) => x.startsWith("identidade"))) {
+    parsed.reply = corrigirIdentidade(parsed.reply);
   }
 
   const novoEstado = aplicarEstado(state, parsed, pacotes, lead);

@@ -17,6 +17,17 @@ const ABERTURAS_PROIBIDAS: RegExp[] = [
   /apresentar (os )?nossos servi[çc]os/i,
 ];
 
+// Identidade: o agente fala EM NOME do Iago, nunca COMO o Iago. Se ele se passa
+// pelo Iago, o handoff do fechamento fica incoerente (o Iago apresentando o
+// Iago) — e o lead descobre a troca no meio da negociação.
+const SE_PASSA_POR_IAGO: RegExp[] = [
+  /\b(sou|aqui (é|e)) o iago\b/i,
+  /\bsou iago\b/i,
+  /\bmeu nome (é|e) iago\b/i,
+  /\b(eu )?me chamo iago\b/i,
+  /\bfala(ndo)? com o iago aqui\b/i,
+];
+
 // §7 e §15 — linguagem de benchmark inventado.
 const BENCHMARK_INVENTADO: RegExp[] = [
   /normalmente,? (as )?empresas/i,
@@ -141,6 +152,14 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
+  for (const re of SE_PASSA_POR_IAGO) {
+    if (re.test(reply)) {
+      v.push("identidade: se apresentou COMO o Iago — você fala em nome dele, não como ele");
+      bloqueia = true;
+      break;
+    }
+  }
+
   for (const re of BENCHMARK_INVENTADO) {
     if (re.test(reply)) { v.push("§7: benchmark/estatística de mercado sem fonte"); bloqueia = true; break; }
   }
@@ -188,6 +207,20 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   if (!pediuDetalhe && reply.length > 700) v.push(`§40: mensagem longa (${reply.length} caracteres)`);
 
   return { ok: v.length === 0, violacoes: v, bloqueiaEnvio: bloqueia };
+}
+
+// Último recurso da identidade: se depois da correção o modelo AINDA se
+// apresentar como o Iago, a máquina reescreve a frase em vez de deixar passar.
+// É substituição literal, não geração — não inventa conteúdo novo.
+export function corrigirIdentidade(reply: string): string {
+  const trocado = reply
+    .replace(/\b(sou|aqui (é|e))\s+o\s+iago\s+rodrigues\b/gi, "trabalho com o Iago Rodrigues")
+    .replace(/\b(sou|aqui (é|e))\s+o\s+iago\b/gi, "trabalho com o Iago")
+    .replace(/\bsou\s+iago\s+rodrigues\b/gi, "trabalho com o Iago Rodrigues")
+    .replace(/\bsou\s+iago\b/gi, "trabalho com o Iago")
+    .replace(/\b(meu nome (é|e)|me chamo)\s+iago(\s+rodrigues)?\b/gi, "sou o consultor comercial do Iago Rodrigues");
+  // a troca pode deixar minúscula no começo da frase ("Boa tarde. trabalho com…")
+  return trocado.replace(/(^|[.!?]\s+|\n\s*)([a-zà-ú])/g, (_, antes: string, letra: string) => antes + letra.toUpperCase());
 }
 
 // Resposta de emergência: se o modelo insistir em furar o gate de preço, a
