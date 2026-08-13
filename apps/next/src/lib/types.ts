@@ -74,6 +74,21 @@ export interface SellerScore {
 
 export type LeadScore = ScoreBreakdown | IcpScore | SellerScore;
 
+// Mensagem de uma conversa de WhatsApp conduzida pela IA (agente Vendedor).
+export interface ConversationMsg {
+  role: "lead" | "ia" | "sistema"; // quem falou
+  text: string;
+  at: string; // ISO
+}
+
+// Resultado de um turno do agente Vendedor (o que a IA decidiu fazer).
+export type SdrAction =
+  | "continuar" // segue conversando
+  | "agendar" // lead topou reunião → agente Agenda
+  | "handoff_fechamento" // pronto pra fechar → chama o Iago
+  | "nao_interessado" // recusou → nutrir
+  | "opt_out"; // pediu pra não receber mais
+
 export interface OutreachAttempt {
   step: string; // contato_inicial | followup_1 | ...
   channel: "whatsapp" | "email";
@@ -130,6 +145,9 @@ export interface Lead {
   seller?: SellerMetrics; // métricas de marketplace (JoomPulse), quando o lead é um seller
 
   score?: LeadScore;
+  conversation?: ConversationMsg[]; // histórico da conversa conduzida pela IA
+  handoff_reason?: string; // por que o Porteiro escalou pro Iago
+  handoff_at?: string; // ISO — quando escalou pro fechamento
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;
