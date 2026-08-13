@@ -111,6 +111,7 @@ export type DiscoverySlot =
   | "problema" // camada 2: a dor PRINCIPAL (uma por vez)
   | "situacao" // camada 3: contexto leve — já vende? canais? sozinho ou equipe?
   | "prioridade" // camada 4: quer resolver agora?
+  | "volume" // camada 5: quanto compra de mercadoria por mês — PROTEGE A AGENDA
   // --- daqui pra baixo é assunto de REUNIÃO, não de chat (§1, §8, §17) ---
   | "causa"
   | "impacto" // números só quando mudam a decisão (§13)
@@ -120,13 +121,14 @@ export type DiscoverySlot =
 
 // Ordem em que o chat persegue as camadas.
 export const DISCOVERY_ORDER: DiscoverySlot[] = [
-  "motivo", "problema", "situacao", "prioridade",
+  "motivo", "problema", "situacao", "prioridade", "volume",
   "causa", "impacto", "capacidade", "decisao", "criterio",
 ];
 
 // O que o CHAT precisa. O resto fica pra reunião (§16: não ter medo de marcar
-// reunião sem saber tudo).
-export const SLOTS_DO_CHAT: DiscoverySlot[] = ["motivo", "problema", "situacao", "prioridade"];
+// reunião sem saber tudo). `volume` entra porque é a única variável que pode
+// MATAR o fit — quem compra R$3 mil/mês não justifica ocupar a agenda do Iago.
+export const SLOTS_DO_CHAT: DiscoverySlot[] = ["motivo", "problema", "situacao", "prioridade", "volume"];
 
 // Fase da conversa — DERIVADA dos slots pelo código, nunca escolhida pela IA.
 // Fluxo da §14: abertura → motivo → dor → contexto → percepção → fit → próximo passo.
@@ -154,6 +156,9 @@ export interface BusinessCase {
 }
 
 // Score comercial vivo (§35) — recalculado a cada turno a partir do estado.
+// O score mede PROBABILIDADE E QUALIDADE DA OPORTUNIDADE — não quantos campos
+// do questionário foram preenchidos. Dado que falta vale nota provisória do
+// meio, não zero: desconhecido ≠ ruim.
 export interface SdrCommercialScore {
   fit: number; // 0-10 produto/segmento/estrutura
   dor: number; // 0-10 real, relevante, mensurável
@@ -163,7 +168,12 @@ export interface SdrCommercialScore {
   capacidade: number; // 0-10 financeira/equipe/execução
   confianca: number; // 0-10 relação/provas/objeções
   total: number; // 0-70
+  provisorio: boolean; // faltam volume e/ou autoridade para confirmar
+  aConfirmar: string[]; // o que precisa ser confirmado para firmar o score
 }
+
+// Faixas de compra mensal — protegem a agenda sem virar interrogatório.
+export type FaixaVolume = "ate_20k" | "20k_50k" | "50k_100k" | "acima_100k" | "desconhecida";
 
 // Sinais estruturados que a IA reporta e o CÓDIGO usa pra escolher a oferta.
 export type NecessidadeTipo =
@@ -187,6 +197,12 @@ export interface SdrSignals {
   aderencia?: boolean; // o problema tem a ver com o que o Iago faz
   vontadeResolver?: boolean;
   possibilidadeContratacao?: boolean;
+
+  faixaVolume?: FaixaVolume; // quanto compra de mercadoria por mês
+  problemaEconomico?: boolean; // margem, custo, caixa — dói no bolso
+  reuniaoImediata?: boolean; // pediu pra falar AGORA: sinal forte de intenção
+  aceitouReuniao?: boolean;
+  ehDecisor?: boolean;
 }
 
 export interface SdrState {
@@ -208,6 +224,8 @@ export interface SdrState {
 
   score?: SdrCommercialScore;
   riscos?: string[];
+  sinaisIntencao?: string[]; // ex.: "lead pediu reunião imediata" — prioriza na agenda
+  prioridadeAgenda?: "alta" | "normal"; // alta = furar fila
   updatedAt: string;
 }
 

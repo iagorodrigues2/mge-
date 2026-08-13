@@ -27,6 +27,71 @@ boas oportunidades em **dinheiro efetivamente recebido**.
 
 ---
 
+## 🚨 HARD RULE — nunca inventar observação sobre o lead
+
+**A regra mais cara de violar em toda a máquina.** O agente jamais afirma que
+viu, analisou, pesquisou ou acompanhou qualquer informação da empresa que não
+esteja **efetivamente no CRM**. Não existe "acompanhamos o perfil de vocês no
+Instagram" se o lead não tem Instagram cadastrado — ele responde "nós não temos
+Instagram" e a confiança acaba ali, em 20 segundos, sem volta.
+
+Implementação em três pontos:
+- `fatosDoLead()` monta a lista do que existe no cadastro (Instagram, site,
+  marketplace, CNPJ/CNAE).
+- O prompt recebe **também a lista do que NÃO temos**, com proibição explícita.
+- O guard `CANAIS_OBSERVAVEIS` cruza qualquer verbo de observação ("vi",
+  "analisei", "acompanhei", "reparei", "pesquisei") com o canal citado e
+  **bloqueia** se o dado não existir.
+
+Sem dados, a abertura certa é honesta: *"Boa tarde! Seja bem-vindo. O que te
+chamou atenção por lá e o que você está buscando melhorar hoje?"*
+
+**Não perguntar por onde o lead chegou.** Atribuição é dado de marketing, não
+prioridade comercial. Ele já chegou — converse com ele. Guard:
+`PERGUNTA_DE_ATRIBUICAO`.
+
+**Hipótese econômica, nunca promessa.** Errado: "o caminho que abre mais margem
+é a importação direta". Certo: "a importação direta pode abrir bastante espaço
+de margem — mas o ponto é descobrir se o volume e a estrutura de vocês
+justificam a operação". Guard: `SOLUCAO_AFIRMATIVA`.
+
+## Volume de compra — a variável que protege a agenda
+
+Antes de marcar reunião, **uma** pergunta a mais (não volta para margem, NCM ou
+imposto):
+
+> "Só pra eu não te colocar numa conversa que depois não faça sentido: hoje
+> vocês compram aproximadamente quanto de mercadoria por mês? Menos de R$20 mil,
+> entre R$20 e R$50 mil, R$50 a R$100 mil ou acima disso?"
+
+`podeAgendar` exige a faixa; `ajustarAcao` rebaixa `agendar` → `continuar` se ela
+faltar, mesmo que o modelo já tenha escrito o convite. `volumeInviavel`
+(até R$20 mil/mês) faz o agente ser honesto em vez de encher a agenda.
+
+## Score = probabilidade da oportunidade, não campos preenchidos
+
+O score **não** mede quantos campos do questionário foram respondidos. Dado que
+falta vale **nota provisória do meio (4), não zero** — desconhecido ≠ ruim.
+
+Um lead com marketplace ativo, dor econômica declarada, dono presente e prazo de
+90 dias chega a **53/70 provisório**; com volume acima de R$100 mil vai a
+**61/70**; pedindo reunião imediata, **64/70**. O `provisorio` é condicionado à
+confirmação de **volume e autoridade** — não ao impacto em R$, que
+deliberadamente não perseguimos no chat.
+
+**Pedido de reunião imediata** ("consegue daqui a 30 min?") é o sinal de intenção
+mais forte que existe: zera a urgência em 10, grava em `sinaisIntencao` e marca
+`prioridadeAgenda: "alta"`.
+
+## Agenda: consultar, não prometer
+
+Quando a integração estiver ativa (`AGENDA_INTEGRADA`), é **proibido** responder
+"vou verificar e te retorno". O agente consulta e responde concreto: *"consigo
+verificar agora — às 17h30 está disponível, posso reservar?"* ou, sem vaga,
+*"daqui a 30 minutos ele não consegue, mas tenho 18h hoje ou 14h amanhã"*. Guard:
+`PROMETEU_VERIFICAR`. Enquanto a integração não existe, o agente assume
+compromisso curto e específico, e nunca inventa horário.
+
 ## ⚠ Correção Prioritária — o chat NÃO é a consultoria
 
 Documento "CORREÇÃO PRIORITÁRIA — DISCOVERY COMERCIAL" (19 seções). **Tem

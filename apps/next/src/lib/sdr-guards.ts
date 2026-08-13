@@ -46,6 +46,35 @@ export function detectaFadiga(texto: string): boolean {
   return SINAIS_DE_FADIGA.some((re) => re.test(texto));
 }
 
+// Perguntar "por onde exatamente você chegou?" é informação de MARKETING, não
+// prioridade comercial. Ele já chegou — converse com ele.
+const PERGUNTA_DE_ATRIBUICAO: RegExp[] = [
+  /por onde (exatamente )?(voc[êe] )?(chegou|nos achou|me achou|encontrou)/i,
+  /como (voc[êe] )?(chegou at[ée]|nos (achou|encontrou|conheceu)|soube da gente)/i,
+  /onde (voc[êe] )?(viu|conheceu) (a gente|o iago|nosso trabalho)/i,
+  /qual (canal|rede) (voc[êe] )?(usou|veio)/i,
+];
+
+// Solução apresentada como certeza antes de validar volume/estrutura.
+// "a importação direta é o caminho que abre mais margem" → afirmativo demais.
+const SOLUCAO_AFIRMATIVA: RegExp[] = [
+  /(normalmente |geralmente )?o caminho que (abre|traz|gera) mais margem [ée]/i,
+  /(a|o) \w+ (direta|direto) (vai|irá) (resolver|abrir|aumentar)/i,
+  /(voc[êe] )?precisa (mesmo )?[ée] (de |da |do )/i,
+  /a solu[çc][ãa]o (aqui )?[ée]/i,
+  /o que (vai|irá) resolver isso [ée]/i,
+  /com certeza (vai|irá) (resolver|funcionar|dar certo)/i,
+];
+
+// Quando a agenda está integrada, "vou verificar e te retorno" é inaceitável.
+const PROMETEU_VERIFICAR: RegExp[] = [
+  /vou (verificar|checar|ver) (a )?(agenda|disponibilidade)[^.?!]{0,30}(e (te )?(retorno|aviso|falo)|depois)/i,
+  /(te )?(retorno|aviso|confirmo) (depois|mais tarde|em seguida|assim que)/i,
+  /vou (falar|alinhar) com o iago e (te )?(retorno|aviso)/i,
+];
+
+export const AGENDA_INTEGRADA = !!process.env.GOOGLE_CALENDAR_TOKEN || !!process.env.AGENDA_URL;
+
 // "Tudo bem?" é saudação, não pergunta de descoberta. A própria Correção §10
 // prescreve "Boa tarde! Tudo bem? O que te fez procurar o Iago?" — contar isso
 // como duas perguntas puniria o comportamento correto.
@@ -72,6 +101,33 @@ const MINUCIA_FINANCEIRA: RegExp[] = [
   /quanto (voc[êe]s? )?(mant[êe]m|t[êe]m) imobilizado/i,
   /qual (o |seu )?capital de giro/i,
 ];
+
+// ===== HARD RULE: nunca afirmar que viu/analisou/acompanhou algo que não temos
+// no CRM. Inventar "acompanhamos o perfil de vocês no Instagram" quando o lead
+// nem tem Instagram destrói a confiança em 20 segundos e não tem volta. Esta é a
+// regra mais cara de violar em toda a máquina.
+
+// Verbos de observação: "vi", "analisei", "acompanhei", "reparei", "pesquisei"…
+const VERBO_OBSERVACAO = String.raw`(vi|olhei|analis(?:ei|amos)|acompanh(?:ei|amos|ando)|repar(?:ei|amos)|not(?:ei|amos)|pesquis(?:ei|amos)|conferi|dei uma olhada|estive olhando|andei vendo|observ(?:ei|amos))`;
+
+// Cada canal só pode ser citado como "observado" se existir no cadastro.
+const CANAIS_OBSERVAVEIS: { chave: "instagram" | "website" | "marketplace"; re: RegExp; nome: string }[] = [
+  { chave: "instagram", re: new RegExp(String.raw`${VERBO_OBSERVACAO}[^.?!]{0,80}(instagram|insta\b|perfil de voc[êe]s|perfil da)`, "i"), nome: "Instagram" },
+  { chave: "website", re: new RegExp(String.raw`${VERBO_OBSERVACAO}[^.?!]{0,80}(site|website|loja virtual|p[áa]gina de voc[êe]s)`, "i"), nome: "site" },
+  { chave: "marketplace", re: new RegExp(String.raw`${VERBO_OBSERVACAO}[^.?!]{0,80}(mercado livre|amazon|shopee|marketplace|an[úu]ncios de voc[êe]s|sua loja no)`, "i"), nome: "marketplace" },
+];
+
+// Afirmações de pesquisa genérica ("analisamos a operação de vocês").
+const PESQUISA_GENERICA = new RegExp(
+  String.raw`${VERBO_OBSERVACAO}[^.?!]{0,60}(a (opera[çc][ãa]o|empresa|loja|marca) de voc[êe]s|o (neg[óo]cio|trabalho) de voc[êe]s)`, "i",
+);
+
+export interface FatosDoLead {
+  instagram: boolean;
+  website: boolean;
+  marketplace: boolean;
+  qualquerDado: boolean; // temos ALGUM dado público confirmado?
+}
 
 // §7 e §15 — linguagem de benchmark inventado.
 const BENCHMARK_INVENTADO: RegExp[] = [
@@ -102,6 +158,7 @@ export interface GuardContext {
   primeiraMensagem: boolean;
   precosPermitidos: number[]; // valores que PODEM aparecer (pacote candidato + conta do payback)
   soPergunta: boolean; // a resposta é só pergunta, sem reconhecimento nem percepção
+  fatos: FatosDoLead; // o que REALMENTE temos no cadastro
 }
 
 export interface GuardResult {
@@ -198,6 +255,18 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
+  // HARD RULE — observação inventada. Só pode dizer que viu o que existe no CRM.
+  for (const canal of CANAIS_OBSERVAVEIS) {
+    if (canal.re.test(reply) && !ctx.fatos[canal.chave]) {
+      v.push(`OBSERVAÇÃO INVENTADA: afirmou ter visto/analisado o ${canal.nome} do lead, e não temos esse dado no cadastro`);
+      bloqueia = true;
+    }
+  }
+  if (PESQUISA_GENERICA.test(reply) && !ctx.fatos.qualquerDado) {
+    v.push("OBSERVAÇÃO INVENTADA: afirmou ter analisado a operação do lead sem nenhum dado público confirmado");
+    bloqueia = true;
+  }
+
   for (const re of SE_PASSA_POR_IAGO) {
     if (re.test(reply)) {
       v.push("identidade: se apresentou COMO o Iago — você fala em nome dele, não como ele");
@@ -277,8 +346,39 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   }
 
   // §7/§18: não convide para a reunião sem ter entregue nenhuma leitura útil.
-  if (!state.percepcaoEntregue && /reuni[ãa]o|conversa com o iago|agendar|marcar (um|uma)/i.test(reply)) {
+  // (confere o estado JÁ atualizado com este turno — a percepção pode vir na
+  // mesma mensagem do convite, e isso é correto)
+  const temPercepcaoAgora = state.percepcaoEntregue || !ctx.soPergunta;
+  if (!temPercepcaoAgora && /reuni[ãa]o|conversa com o iago|agendar|marcar (um|uma)/i.test(reply)) {
     v.push("§18: convidou para a reunião sem ter entregue nenhuma percepção útil antes");
+  }
+
+  // Atribuição é assunto de marketing, não de venda.
+  for (const re of PERGUNTA_DE_ATRIBUICAO) {
+    if (re.test(reply)) {
+      v.push("atribuição: perguntou por onde o lead chegou — isso é dado de marketing, não prioridade comercial. Ele já chegou; converse com ele");
+      bloqueia = true;
+      break;
+    }
+  }
+
+  // Solução afirmada como certeza antes de validar volume e estrutura.
+  for (const re of SOLUCAO_AFIRMATIVA) {
+    if (re.test(reply)) {
+      v.push("hipótese≠certeza: apresentou a solução como fato. Use linguagem de hipótese econômica a validar (\"pode abrir espaço de margem — o ponto é descobrir se o volume e a estrutura justificam\")");
+      break;
+    }
+  }
+
+  // Agenda integrada: consultar agora, não prometer retorno.
+  if (AGENDA_INTEGRADA) {
+    for (const re of PROMETEU_VERIFICAR) {
+      if (re.test(reply)) {
+        v.push("agenda: a integração está ativa — consulte a disponibilidade AGORA e ofereça horários concretos, não prometa retorno");
+        bloqueia = true;
+        break;
+      }
+    }
   }
 
   // §40: mensagem de WhatsApp curta, salvo quando o lead pediu explicação.

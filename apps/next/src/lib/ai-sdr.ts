@@ -11,18 +11,18 @@
 import { llmChat, activeLlm, type LlmMessage } from "./llm";
 import { listPackages } from "./db";
 import type {
-  CapacidadeExecucao, ConversationMsg, DiscoverySlot, Lead, NecessidadeTipo,
+  CapacidadeExecucao, ConversationMsg, DiscoverySlot, FaixaVolume, Lead, NecessidadeTipo,
   SdrAction, SdrState, ServicePackage,
 } from "./types";
 import { DISCOVERY_ORDER } from "./types";
 import {
-  buildBusinessCase, camadasDoChatCompletas, computePhase, escolherOferta, MESES_PAYBACK_PADRAO,
+  buildBusinessCase, camadasDoChatCompletas, computePhase, escolherOferta, known, MESES_PAYBACK_PADRAO,
   mergeDiscovery, PERGUNTA_DO_SLOT, PERGUNTAS_MAX, podeAgendar, podeEscalarFechamento,
-  podeMontarBusinessCase, precoModo, proximoSlot, resumoEstado, scoreFromState, stateOf,
+  podeMontarBusinessCase, precoModo, proximoSlot, resumoEstado, scoreFromState, stateOf, volumeInviavel,
 } from "./sdr-state";
 import {
-  checarResposta, contaPerguntas, corrigirIdentidade, detectaFadiga,
-  respostaDeSeguranca, semSaudacoes, valoresCitados,
+  AGENDA_INTEGRADA, checarResposta, contaPerguntas, corrigirIdentidade, detectaFadiga,
+  type FatosDoLead, respostaDeSeguranca, semSaudacoes, valoresCitados,
 } from "./sdr-guards";
 
 const AGENDA_URL = process.env.AGENDA_URL || ""; // link de agendamento do Iago, se houver
@@ -36,6 +36,26 @@ export interface SdrTurn {
   violacoes?: string[]; // regras do Prompt Mestre que a saída bruta feriu
   error?: string;
   backend?: string;
+}
+
+// O que REALMENTE temos no cadastro. É a lista contra a qual o guard confere
+// qualquer afirmação de "eu vi / eu analisei" — se não está aqui, não pode ser
+// dito. Dado inventado sobre a empresa do lead queima a conversa na hora.
+export function fatosDoLead(lead: Lead): FatosDoLead {
+  const marketplace = !!(
+    lead.marketplace_presence?.mercado_livre ||
+    lead.marketplace_presence?.amazon ||
+    lead.marketplace_presence?.shopee ||
+    lead.seller
+  );
+  const instagram = !!lead.instagram;
+  const website = !!lead.website;
+  return {
+    instagram,
+    website,
+    marketplace,
+    qualquerDado: instagram || website || marketplace || !!lead.cnpj || !!lead.cnae_descricao,
+  };
 }
 
 // Fatos públicos do lead — material verdadeiro para a observação da abordagem.
@@ -60,7 +80,22 @@ function leadFacts(lead: Lead): string {
     if (bits.length) f.push(`Métricas de marketplace: ${bits.join("; ")}`);
   }
   if (lead.website) f.push(`Site: ${lead.website}`);
-  return f.length ? f.join("\n") : "(poucos dados públicos confirmados — investigue na conversa antes de afirmar)";
+  if (lead.instagram) f.push(`Instagram: ${lead.instagram}`);
+
+  // A lista do que NÃO temos é tão importante quanto a do que temos: é ela que
+  // impede a IA de dizer "acompanhamos o perfil de vocês no Instagram".
+  const fatos = fatosDoLead(lead);
+  const ausentes = [
+    !fatos.instagram && "Instagram",
+    !fatos.website && "site",
+    !fatos.marketplace && "presença em marketplace",
+  ].filter(Boolean);
+
+  const cabecalho = f.length ? f.join("\n") : "(nenhum dado público confirmado sobre esta empresa)";
+  const aviso = ausentes.length
+    ? `\n\n⛔ NÃO TEMOS DADO NENHUM sobre: ${ausentes.join(", ")}. É PROIBIDO afirmar que viu, analisou ou acompanhou qualquer um desses — o lead vai desmentir na hora. Pergunte em vez de afirmar.`
+    : "";
+  return cabecalho + aviso;
 }
 
 // "Quando indicar" cada oferta. NOTA: nenhuma delas é apresentada como "a
@@ -104,7 +139,17 @@ NÃO IMITE O IAGO LITERALMENTE: carregue a experiência, o raciocínio e o posic
 
 POSICIONAMENTO DO IAGO: especialista em implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) para fabricantes, indústrias, distribuidores, importadores e marcas próprias. O diferencial dele é conectar marketplace + catálogo + precificação + margem + estoque + giro + logística + fulfillment + ERP + anúncios + importação + negociação com fornecedores + capital de giro + fluxo de caixa + expansão. Ele NÃO é mentor, professor, gestor de anúncios, agência nem consultor genérico de e-commerce. A autoridade aparece na QUALIDADE DA ANÁLISE, nunca em autopromoção.`;
 
-const VERDADE = `PROIBIDO INVENTAR (regra absoluta): benchmarks, faturamento, margem, ROI, números de mercado, crescimento de categoria, resultados de clientes, quantidade de vendas, percentuais de desperdício, cases, prazos e performance. Exemplo PROIBIDO: "empresas desse tipo normalmente perdem entre 8% e 15% de margem".
+const VERDADE = `╔═ HARD RULE — A REGRA MAIS CARA DE VIOLAR EM TODA A MÁQUINA ═╗
+NUNCA afirme que viu, analisou, pesquisou, acompanhou ou reparou em QUALQUER informação da empresa que não esteja LITERALMENTE na lista de fatos conhecidos abaixo. Nada de "acompanhamos o perfil de vocês no Instagram", "analisei a operação de vocês", "vi seus anúncios no Mercado Livre" se isso não estiver no cadastro.
+Se o lead não tem Instagram cadastrado e você disser que viu o Instagram dele, ele responde "nós não temos Instagram" — e a confiança acaba ali, em 20 segundos, sem volta. Vale MUITO mais dizer menos do que inventar contexto.
+Sem dados confirmados: seja honesto e pergunte. "Boa tarde! Seja bem-vindo. O que te chamou atenção e o que você está buscando melhorar hoje?" é uma abertura melhor do que qualquer observação inventada.
+╚════════════════════════════════════════════════════════════╝
+
+NÃO PERGUNTE POR ONDE O LEAD CHEGOU. Se ele disser "vim pelo Instagram" e você não tiver esse dado, apenas acolha e siga: "Seja bem-vindo! O que te chamou atenção por lá e o que você está buscando melhorar hoje?". Se ele disser que NÃO tem o canal que você citou, não insista em descobrir a origem — isso é informação para o marketing, não prioridade comercial. Ele já chegou: converse com ele.
+
+HIPÓTESE ECONÔMICA, NÃO PROMESSA. Ao apontar um caminho (importação direta, mudança de canal, reestruturação), apresente como hipótese A VALIDAR, nunca como certeza. Errado: "o caminho que abre mais margem é a importação direta". Certo: "nesse cenário, a importação direta pode abrir bastante espaço de margem — mas o ponto é descobrir se o volume e a estrutura de vocês justificam a operação". A mensagem que o lead tem que receber é "isso é uma hipótese que vamos validar", nunca "isso vai resolver".
+
+PROIBIDO INVENTAR (regra absoluta): benchmarks, faturamento, margem, ROI, números de mercado, crescimento de categoria, resultados de clientes, quantidade de vendas, percentuais de desperdício, cases, prazos e performance. Exemplo PROIBIDO: "empresas desse tipo normalmente perdem entre 8% e 15% de margem".
 Só cite número que (a) o próprio lead te deu, ou (b) veio do catálogo oficial abaixo, ou (c) é conta aritmética feita com esses dois. Se não souber: "não tenho base suficiente para afirmar esse número". Precisão vale mais que parecer convincente.
 
 HIPÓTESE ≠ DIAGNÓSTICO: com poucos dados, fale em hipótese ("pode existir um descasamento entre giro, pagamento de fornecedor e recebimento — precisamos entender onde isso acontece"), nunca como fato ("seu problema é X"). Nunca declare como comprovado o que não foi comprovado.`;
@@ -184,8 +229,18 @@ function blocoFase(state: SdrState, pacotes: ServicePackage[]): string {
     contexto: `CAMADA 3 — CONTEXTO. Uma ou duas perguntas leves, nada de auditoria: já vende? em quais canais? está sozinho ou tem equipe? a operação está começando ou já tem volume?`,
     percepcao: `VOCÊ JÁ TEM O SUFICIENTE PARA ENTREGAR VALOR. Neste turno, NÃO faça mais uma pergunta de descoberta: dê uma PERCEPÇÃO ÚTIL sobre o que ele contou (curta, honesta, marcando o que é hipótese). Só depois, se couber, uma pergunta leve.`,
     fit: `CAMADA 4/5 — PRIORIDADE E FIT. Falta saber se ele quer resolver isso AGORA e se existe estrutura/problema compatível com o trabalho do Iago. Uma pergunta só.`,
+    volume: `CAMADA 5 — VOLUME DE COMPRA. Esta é a única variável que pode MATAR o fit: quem compra R$3 mil/mês não justifica ocupar a agenda do Iago com uma implantação. Pergunte de forma protetora e com faixas, exatamente neste espírito: "Só pra eu não te colocar numa conversa que depois não faça sentido: hoje vocês compram aproximadamente quanto de mercadoria por mês? Menos de R$20 mil, entre R$20 e R$50 mil, R$50 a R$100 mil ou acima disso?". NÃO volte para margem, NCM, imposto ou custo — só o volume.`,
   };
-  if (CAMADA[state.phase]) linhas.push(CAMADA[state.phase]!);
+  // a fase "fit" cobre prioridade e volume; mostra a instrução do que falta
+  if (state.phase === "fit" && !known(state.discovery.volume) && known(state.discovery.prioridade)) {
+    linhas.push(CAMADA.volume!);
+  } else if (CAMADA[state.phase]) {
+    linhas.push(CAMADA[state.phase]!);
+  }
+
+  if (volumeInviavel(state)) {
+    linhas.push(`⚠ O VOLUME DECLARADO É BAIXO (até R$20 mil/mês). Provavelmente não justifica uma implantação tradicional. Seja honesto: explique que nesse porte o caminho costuma ser outro, ofereça uma orientação útil e NÃO empurre reunião só para preencher agenda.`);
+  }
 
   if (slot && state.phase !== "percepcao" && state.phase !== "proximo_passo") {
     linhas.push(`O QUE FALTA DESCOBRIR: ${PERGUNTA_DO_SLOT[slot]}. Uma pergunta só, encadeada no que ele acabou de dizer.`);
@@ -248,10 +303,16 @@ function blocoFase(state: SdrState, pacotes: ServicePackage[]): string {
     `NEGOCIAÇÃO: você PODE informar preço de referência, condição e parcelamento padrão e escopo padrão. Você NÃO PODE sozinho dar desconto, mudar preço, prometer exceção ou criar escopo customizado. Se perguntarem "tem negociação?": "o valor de referência é X; temos condições de pagamento dentro da política comercial. Desconto ou alteração relevante de escopo o Iago avalia depois do diagnóstico, porque primeiro precisamos entender o que realmente faria sentido executar." Nunca responda apenas "fale com o Iago" — você tem autoridade comercial.`,
   );
 
+  // Se o lead pede reunião IMEDIATA, isso é o sinal de intenção mais forte que
+  // existe — a resposta não pode ser burocrática.
+  if (state.signals.reuniaoImediata) {
+    linhas.push(`⚡ O LEAD PEDIU REUNIÃO IMEDIATA. Sinal fortíssimo de intenção: trate com prioridade máxima e responda com agilidade — nada de burocracia ou "depois eu te falo".`);
+  }
+
   linhas.push(
-    AGENDA_URL
-      ? `AGENDAMENTO: ofereça este link — ${AGENDA_URL}. Nunca invente horário.`
-      : `AGENDAMENTO: ainda não há integração de agenda. Diga que vai verificar a disponibilidade e confirmar. NUNCA invente ou confirme horário por conta própria.`,
+    AGENDA_INTEGRADA
+      ? `AGENDAMENTO (integração ATIVA): você tem acesso à disponibilidade. É PROIBIDO responder "vou verificar e te retorno". Consulte agora e responda concreto: se houver vaga, "consigo verificar agora — às 17h30 está disponível, posso reservar?"; se não houver, ofereça as alternativas reais mais próximas ("daqui a 30 minutos ele não consegue, mas tenho 18h hoje ou 14h amanhã").${AGENDA_URL ? ` Link de agendamento: ${AGENDA_URL}.` : ""} Nunca invente horário que a agenda não confirmou.`
+      : `AGENDAMENTO: a integração de agenda ainda NÃO está ativa. Diga que vai confirmar a disponibilidade com o Iago e retorna com os horários — mas seja rápido e específico no compromisso ("te confirmo ainda hoje"). NUNCA invente nem confirme horário por conta própria.`,
   );
 
   return linhas.join("\n\n");
@@ -263,8 +324,9 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
   "descobertas": {
     "motivo":     {"status": "desconhecido|hipotese|confirmado", "valor": "por que ele procurou a gente"},
     "problema":   {"status": "...", "valor": "a dor PRINCIPAL"},
-    "situacao":   {"status": "...", "valor": "contexto leve: canais, equipe, volume"},
+    "situacao":   {"status": "...", "valor": "contexto leve: canais, equipe"},
     "prioridade": {"status": "...", "valor": "quer resolver agora?"},
+    "volume":     {"status": "...", "valor": "quanto compra de mercadoria por mês"},
     "causa":      {"status": "...", "valor": "só se ELE contou espontaneamente"},
     "impacto":    {"status": "...", "valor": "só se ELE contou espontaneamente"}
   },
@@ -275,6 +337,11 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
     "aderencia": true|false|null,
     "vontade_resolver": true|false|null,
     "possibilidade_contratacao": true|false|null,
+    "faixa_volume": "ate_20k|20k_50k|50k_100k|acima_100k|desconhecida",
+    "problema_economico": true|false|null,
+    "reuniao_imediata": true se o lead pediu pra falar AGORA/hoje/em minutos,
+    "aceitou_reuniao": true|false|null,
+    "eh_decisor": true se ele é dono/sócio/quem decide,
     "necessidade": "clareza|direcao|montar_operacao|escala_continua|nenhuma|desconhecida",
     "capacidade_execucao": "tem_equipe|parcial|sem_equipe|desconhecida",
     "impacto_mensal_estimado": número em R$/mês derivado DOS NÚMEROS DO LEAD, ou null,
@@ -329,7 +396,14 @@ interface ParsedTurn {
   aderencia?: boolean;
   vontadeResolver?: boolean;
   possibilidadeContratacao?: boolean;
+  faixaVolume?: FaixaVolume;
+  problemaEconomico?: boolean;
+  reuniaoImediata?: boolean;
+  aceitouReuniao?: boolean;
+  ehDecisor?: boolean;
 }
+
+const FAIXAS: FaixaVolume[] = ["ate_20k", "20k_50k", "50k_100k", "acima_100k", "desconhecida"];
 
 // tri-estado: true / false / indefinido (o modelo pode mandar null)
 function bool3(v: unknown): boolean | undefined {
@@ -372,6 +446,11 @@ function parseTurn(raw: string): ParsedTurn {
       aderencia: bool3(sinais.aderencia),
       vontadeResolver: bool3(sinais.vontade_resolver),
       possibilidadeContratacao: bool3(sinais.possibilidade_contratacao),
+      faixaVolume: FAIXAS.includes(sinais.faixa_volume as FaixaVolume) ? (sinais.faixa_volume as FaixaVolume) : undefined,
+      problemaEconomico: bool3(sinais.problema_economico),
+      reuniaoImediata: bool3(sinais.reuniao_imediata),
+      aceitouReuniao: bool3(sinais.aceitou_reuniao),
+      ehDecisor: bool3(sinais.eh_decisor),
     };
   } catch {
     return vazio;
@@ -442,6 +521,7 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
       primeiraMensagem: historico.filter((h) => h.role === "ia").length === 0,
       precosPermitidos: permitidos,
       soPergunta: ehSoPergunta(p.reply),
+      fatos: fatosDoLead(lead),
     });
     parsed = p;
     violacoes = g.violacoes;
@@ -516,7 +596,20 @@ function aplicarEstado(state: SdrState, p: ParsedTurn, pacotes: ServicePackage[]
     aderencia: p.aderencia ?? state.signals.aderencia,
     vontadeResolver: p.vontadeResolver ?? state.signals.vontadeResolver,
     possibilidadeContratacao: p.possibilidadeContratacao ?? state.signals.possibilidadeContratacao,
+    faixaVolume: (p.faixaVolume && p.faixaVolume !== "desconhecida" ? p.faixaVolume : state.signals.faixaVolume),
+    problemaEconomico: p.problemaEconomico ?? state.signals.problemaEconomico,
+    reuniaoImediata: p.reuniaoImediata || state.signals.reuniaoImediata,
+    aceitouReuniao: p.aceitouReuniao || state.signals.aceitouReuniao,
+    ehDecisor: p.ehDecisor ?? state.signals.ehDecisor,
   };
+
+  // Pedido de reunião imediata é o sinal de intenção mais forte que existe:
+  // registra e prioriza o lead na agenda.
+  if (state.signals.reuniaoImediata) {
+    const marca = "Sinal forte de intenção: lead solicitou reunião imediata";
+    state.sinaisIntencao = Array.from(new Set([...(state.sinaisIntencao ?? []), marca]));
+    state.prioridadeAgenda = "alta";
+  }
 
   // Orçamento de perguntas e ritmo (Correção §3, §6, §7).
   if (p.fezPergunta) state.perguntasFeitas += 1;
@@ -567,6 +660,10 @@ function ajustarAcao(acao: SdrAction, state: SdrState): SdrAction {
     // que o diagnóstico acontece.
     return podeAgendar(state) ? "agendar" : "continuar";
   }
+  // Marcar reunião sem saber o volume desprotege a agenda do Iago: um lead que
+  // compra R$3 mil/mês não justifica a conversa. O gate vale mesmo quando o
+  // modelo já escreveu o convite.
+  if (acao === "agendar" && !podeAgendar(state)) return "continuar";
   // Desqualificar não exige business case: basta ter percorrido as camadas do
   // chat e concluído que não há aderência (§4).
   if (acao === "sem_fit" && !camadasDoChatCompletas(state) && state.signals.aderencia !== false) return "continuar";

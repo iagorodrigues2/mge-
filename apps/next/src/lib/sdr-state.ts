@@ -128,7 +128,16 @@ export function podeAgendar(s: SdrState): boolean {
   const aderencia = sig.aderencia !== false; // só barra se explicitamente sem aderência
   const vontade = known(d.prioridade) || sig.vontadeResolver === true;
   const possivel = sig.possibilidadeContratacao !== false;
-  return problemaReal && aderencia && vontade && possivel && s.percepcaoEntregue;
+  // O volume é a ÚNICA variável que pode matar o fit por completo: quem compra
+  // R$3 mil/mês não justifica ocupar a agenda do Iago. Uma pergunta só, com
+  // faixas — não vira interrogatório e protege a agenda.
+  const volumeOk = known(d.volume) || (!!sig.faixaVolume && sig.faixaVolume !== "desconhecida");
+  return problemaReal && aderencia && vontade && possivel && volumeOk && s.percepcaoEntregue;
+}
+
+// Volume tão baixo que a implantação tradicional não se sustenta.
+export function volumeInviavel(s: SdrState): boolean {
+  return s.signals.faixaVolume === "ate_20k";
 }
 
 // O chat já colheu o que precisava? (as 4 camadas da §4)
@@ -178,8 +187,9 @@ export function proximoSlot(s: SdrState): DiscoverySlot | null {
 export const PERGUNTA_DO_SLOT: Record<DiscoverySlot, string> = {
   motivo: "o que fez o lead procurar a gente (a intenção real por trás do contato)",
   problema: "qual é a dor PRINCIPAL — uma só, a que mais incomoda hoje",
-  situacao: "contexto leve: já vende? em quais canais? está sozinho ou tem equipe? tem volume?",
+  situacao: "contexto leve: já vende? em quais canais? está sozinho ou tem equipe?",
   prioridade: "se ele quer resolver isso agora",
+  volume: "quanto ele compra de mercadoria por mês (ofereça faixas) — protege a agenda do Iago",
   causa: "o que está provocando isso — NA REUNIÃO, não no chat",
   impacto: "quanto custa — só se o número mudar a decisão (§13); senão, fica pra reunião",
   capacidade: "quem executa — assunto de reunião",
@@ -193,6 +203,7 @@ export const PERGUNTA_AO_LEAD: Record<DiscoverySlot, string> = {
   problema: "o que hoje mais está te incomodando nessa operação?",
   situacao: "hoje você já vende em algum canal, e está tocando isso sozinho ou tem equipe?",
   prioridade: "isso é algo que vocês querem resolver agora?",
+  volume: "só pra eu não te colocar numa conversa que depois não faça sentido: hoje vocês compram aproximadamente quanto de mercadoria por mês? Menos de R$20 mil, entre R$20 e R$50 mil, R$50 a R$100 mil ou acima disso?",
   causa: "o que você acha que está provocando isso?",
   impacto: "quanto isso pesa hoje pra vocês?",
   capacidade: "quem tocaria isso internamente hoje?",
@@ -308,49 +319,95 @@ export function escolherOferta(s: SdrState, pacotes: ServicePackage[]): EscolhaO
 
 // ---- Score comercial vivo (§35) ---------------------------------------------
 
+// O score mede PROBABILIDADE E QUALIDADE DA OPORTUNIDADE, não quantos campos do
+// questionário foram preenchidos. Princípio: **dado que falta vale nota
+// provisória do meio (4), não zero** — desconhecido não é o mesmo que ruim.
+// Um lead com marketplace ativo, dor econômica declarada e pedido de reunião
+// imediata é comercialmente quente MESMO sem sabermos volume e autoridade.
+const BASE_PROVISORIA = 4;
+
 export function scoreFromState(s: SdrState, lead?: Lead): SdrCommercialScore {
   const d = s.discovery;
-  const pts = (f: DiscoveryFact, hip = 4, conf = 8) => (f.status === "confirmado" ? conf : f.status === "hipotese" ? hip : 0);
+  const sig = s.signals;
   const txt = (f: DiscoveryFact) => (f.valor ?? "").toLowerCase();
+  const aConfirmar: string[] = [];
 
-  // Fit: perfil ICP do lead + situação apurada.
-  let fit = pts(d.situacao, 3, 6);
+  // --- FIT: já vende em marketplace? o problema é do tipo que o Iago resolve?
+  let fit = BASE_PROVISORIA;
+  const mp = lead?.marketplace_presence;
+  const canais = [mp?.mercado_livre, mp?.amazon, mp?.shopee].filter(Boolean).length;
+  if (canais >= 2) fit += 3; else if (canais === 1) fit += 2;
+  if (lead?.seller) fit += 1;
+  if (/marketplace|mercado livre|amazon|shopee/i.test(txt(d.situacao))) fit += 2;
+  if (sig.aderencia === true) fit += 2;
+  if (sig.aderencia === false) fit = 1;
   const icpTotal = lead?.score && "total" in lead.score ? lead.score.total : undefined;
-  if (typeof icpTotal === "number") fit += icpTotal >= 70 ? 4 : icpTotal >= 50 ? 2 : 0;
+  if (typeof icpTotal === "number" && icpTotal >= 70) fit += 1;
 
-  const dor = pts(d.problema) + (known(d.causa) ? 2 : 0);
+  // --- DOR: declarada já vale muito; econômica vale mais.
+  let dor = d.problema.status === "confirmado" ? 8 : d.problema.status === "hipotese" ? 5 : BASE_PROVISORIA;
+  if (sig.problemaEconomico === true) dor += 2;
+  if (known(d.causa)) dor += 1;
 
-  // Impacto pontua de verdade quando está QUANTIFICADO.
-  let impacto = pts(d.impacto, 3, 7);
-  if (s.businessCase?.impactoMensalEstimado) impacto += 3;
+  // --- IMPACTO: quantificado é o ideal, mas problema econômico DECLARADO já
+  // pontua — exigir número aqui foi o que jogava leads quentes para 25/70.
+  let impacto = BASE_PROVISORIA;
+  if (sig.problemaEconomico === true) impacto += 2;
+  if (confirmed(d.impacto)) impacto += 2;
+  if (s.businessCase?.impactoMensalEstimado) impacto = 9;
+  if (s.businessCase?.viavel === false) impacto = Math.min(impacto, 4);
 
+  // --- URGÊNCIA: pedir reunião imediata é o sinal mais forte que existe.
   const urgTxt = txt(d.prioridade);
-  const urgencia = !known(d.prioridade) ? 0
-    : /agora|urgente|imediat|este m[êe]s|j[áa]/.test(urgTxt) ? 9
-    : /semestre|ano que vem|depois|futuro|mais pra frente/.test(urgTxt) ? 3 : 6;
+  let urgencia = BASE_PROVISORIA;
+  if (known(d.prioridade)) {
+    urgencia = /agora|urgente|imediat|este m[êe]s|j[áa]|90 dias|pr[óo]ximos meses/.test(urgTxt) ? 8
+      : /semestre|ano que vem|depois|futuro|mais pra frente|sem pressa/.test(urgTxt) ? 3 : 6;
+  }
+  if (sig.vontadeResolver === true) urgencia = Math.max(urgencia, 6);
+  if (sig.aceitouReuniao === true) urgencia = Math.max(urgencia, 8);
+  if (sig.reuniaoImediata === true) urgencia = 10; // "consegue daqui a 30 min?"
 
+  // --- AUTORIDADE: desconhecida é provisória, não zero.
   const decTxt = txt(d.decisao);
-  const autoridade = !known(d.decisao) ? 0
-    : /sou (o |a )?(dono|s[óo]cio|ceo|respons[áa]vel)|eu decido|decis[ãa]o [ée] minha/.test(decTxt) ? 10
-    : /s[óo]cio|diretor|conselho|aprova/.test(decTxt) ? 6 : 4;
+  let autoridade = BASE_PROVISORIA;
+  if (sig.ehDecisor === true) autoridade = 10;
+  else if (known(d.decisao)) {
+    autoridade = /sou (o |a )?(dono|s[óo]cio|ceo|respons[áa]vel)|eu decido|decis[ãa]o [ée] minha|empres[áa]rio/.test(decTxt) ? 10
+      : /s[óo]cio|diretor|conselho|aprova/.test(decTxt) ? 6 : 4;
+  } else aConfirmar.push("quem decide");
 
-  const capMap: Record<CapacidadeExecucao, number> = { tem_equipe: 9, parcial: 6, sem_equipe: 3, desconhecida: 0 };
-  let capacidade = capMap[s.signals.capacidadeExecucao];
-  if (s.businessCase?.viavel === true) capacidade = Math.min(10, capacidade + 1);
-  if (s.businessCase?.viavel === false) capacidade = Math.max(0, capacidade - 3);
+  // --- CAPACIDADE: o volume de compra manda aqui.
+  const porFaixa: Record<string, number> = { ate_20k: 3, "20k_50k": 6, "50k_100k": 8, acima_100k: 10 };
+  let capacidade = BASE_PROVISORIA;
+  if (sig.faixaVolume && sig.faixaVolume !== "desconhecida") capacidade = porFaixa[sig.faixaVolume] ?? BASE_PROVISORIA;
+  else aConfirmar.push("volume de compra mensal");
+  const capMap: Record<CapacidadeExecucao, number> = { tem_equipe: 2, parcial: 1, sem_equipe: -1, desconhecida: 0 };
+  capacidade += capMap[sig.capacidadeExecucao];
+  if (sig.possibilidadeContratacao === false) capacidade = Math.min(capacidade, 2);
 
-  // Confiança cresce com a conversa e cai com risco detectado (§34).
-  const turnos = lead?.conversation?.length ?? 0;
-  let confianca = Math.min(7, Math.floor(turnos / 2));
-  if (known(d.criterio)) confianca += 2;
-  confianca = Math.max(0, confianca - (s.riscos?.length ?? 0));
+  // --- CONFIANÇA: engajamento real da conversa.
+  const turnosLead = (lead?.conversation ?? []).filter((c) => c.role === "lead").length;
+  let confianca = BASE_PROVISORIA + Math.min(3, Math.floor(turnosLead / 2));
+  if (s.percepcaoEntregue) confianca += 1;
+  if (sig.aceitouReuniao === true) confianca += 2;
+  if (s.fadigaDetectada) confianca -= 2;
+  confianca -= s.riscos?.length ?? 0;
 
   const clamp = (n: number) => Math.max(0, Math.min(10, Math.round(n)));
   const sc = {
     fit: clamp(fit), dor: clamp(dor), impacto: clamp(impacto), urgencia: clamp(urgencia),
     autoridade: clamp(autoridade), capacidade: clamp(capacidade), confianca: clamp(confianca),
   };
-  return { ...sc, total: Object.values(sc).reduce((a, b) => a + b, 0) };
+  // "Provisório" é condicionado à confirmação de VOLUME e AUTORIDADE — não ao
+  // impacto em R$, que a gente deliberadamente não persegue no chat. Se isso
+  // contasse, o score seria provisório para sempre.
+  return {
+    ...sc,
+    total: Object.values(sc).reduce((a, b) => a + b, 0),
+    provisorio: aConfirmar.length > 0,
+    aConfirmar,
+  };
 }
 
 // ---- Resumo legível (usado no prompt e no painel) ---------------------------

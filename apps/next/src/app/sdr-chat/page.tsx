@@ -27,7 +27,7 @@ const FASES: { key: SdrPhase; label: string }[] = [
 // As 4 camadas que o chat persegue.
 const SLOT_LABEL: Record<string, string> = {
   motivo: "Motivo do contato", problema: "Dor principal",
-  situacao: "Contexto", prioridade: "Prioridade",
+  situacao: "Contexto", prioridade: "Prioridade", volume: "Volume de compra",
 };
 
 // Só aparecem se o lead falar por conta própria — não se persegue no chat.
@@ -47,8 +47,15 @@ function podeAgendarUI(s: SdrState | null): boolean {
   const sig = s.signals ?? {};
   const problemaReal = s.discovery?.problema?.status === "confirmado" || sig.problemaReal === true;
   const vontade = s.discovery?.prioridade?.status !== "desconhecido" || sig.vontadeResolver === true;
-  return problemaReal && vontade && sig.aderencia !== false && sig.possibilidadeContratacao !== false && !!s.percepcaoEntregue;
+  const volumeOk = s.discovery?.volume?.status !== "desconhecido" || (!!sig.faixaVolume && sig.faixaVolume !== "desconhecida");
+  return problemaReal && vontade && volumeOk && sig.aderencia !== false
+    && sig.possibilidadeContratacao !== false && !!s.percepcaoEntregue;
 }
+
+const FAIXA_LABEL: Record<string, string> = {
+  ate_20k: "até R$20 mil/mês", "20k_50k": "R$20-50 mil/mês",
+  "50k_100k": "R$50-100 mil/mês", acima_100k: "acima de R$100 mil/mês",
+};
 
 export default function SdrChatPage() {
   const [empresa, setEmpresa] = useState("Estofados Bariloche");
@@ -187,11 +194,36 @@ export default function SdrChatPage() {
           </div>
         )}
 
+        {/* Score = probabilidade e qualidade da oportunidade, não campos preenchidos */}
+        {state?.score && (
+          <div style={{ marginTop: 12, padding: "9px 12px", background: "var(--panel-2)", borderRadius: 8, fontSize: 13 }}>
+            <b style={{ color: state.score.total >= 45 ? "#2e9e6b" : state.score.total >= 30 ? "#d98e2b" : "var(--muted)" }}>
+              🌡 Score comercial {state.score.total}/70{state.score.provisorio ? " (provisório)" : ""}
+            </b>
+            <div className="hint" style={{ fontSize: 12, marginTop: 4 }}>
+              fit {state.score.fit} · dor {state.score.dor} · impacto {state.score.impacto} · urgência {state.score.urgencia}
+              {" "}· autoridade {state.score.autoridade} · capacidade {state.score.capacidade} · confiança {state.score.confianca}
+            </div>
+            {!!state.score.aConfirmar?.length && (
+              <div className="hint" style={{ fontSize: 12 }}>a confirmar: {state.score.aConfirmar.join(", ")}</div>
+            )}
+            {state.signals?.faixaVolume && state.signals.faixaVolume !== "desconhecida" && (
+              <div className="hint" style={{ fontSize: 12 }}>📦 volume: {FAIXA_LABEL[state.signals.faixaVolume]}</div>
+            )}
+          </div>
+        )}
+
+        {!!state?.sinaisIntencao?.length && (
+          <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(46,158,107,.12)", border: "1px solid #2e9e6b", borderRadius: 8, fontSize: 13 }}>
+            ⚡ <b>{state.sinaisIntencao.join(" · ")}</b>
+            {state.prioridadeAgenda === "alta" && " — prioridade alta na agenda"}
+          </div>
+        )}
+
         <div className="hint" style={{ marginTop: 10, fontSize: 12 }}>
           {state?.ofertaRecomendada
             ? <>🎯 <b>Oferta liberada:</b> {state.ofertaRecomendada} — {state.ofertaMotivo}</>
             : <>🔒 <b>Oferta e preço bloqueados</b> — {state?.ofertaMotivo || "o diagnóstico ainda não está pronto"}</>}
-          {state?.score && <> · score comercial {state.score.total}/70</>}
           {!!state?.riscos?.length && <> · ⚠ risco: {state.riscos.join("; ")}</>}
         </div>
       </div>
