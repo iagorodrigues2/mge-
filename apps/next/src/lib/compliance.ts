@@ -23,9 +23,14 @@ function isBusinessHours(now = new Date()): boolean {
 export async function checkOutbound(lead: Lead, opts: { ignoreHours?: boolean } = {}): Promise<ComplianceResult> {
   const reasons: string[] = [];
   if (lead.opt_out) reasons.push("lead marcou opt-out");
-  if (await isOptedOut(lead.telefone, lead.email, lead.empresa)) reasons.push("consta na lista de opt-out");
-  if (await isBlocked(lead.telefone, lead.email)) reasons.push("consta na blocklist");
-  if (!lead.telefone && !lead.email) reasons.push("sem canal de contato (telefone/e-mail)");
+  // o opt-out vale para QUALQUER número do lead, inclusive o celular minerado
+  const numero = lead.whatsapp ?? lead.telefone;
+  if (await isOptedOut(numero, lead.email, lead.empresa)) reasons.push("consta na lista de opt-out");
+  if (lead.whatsapp && lead.telefone && (await isOptedOut(lead.telefone, undefined, undefined))) {
+    reasons.push("consta na lista de opt-out (telefone cadastrado)");
+  }
+  if (await isBlocked(numero, lead.email)) reasons.push("consta na blocklist");
+  if (!numero && !lead.email) reasons.push("sem canal de contato (WhatsApp/telefone/e-mail)");
   if (!opts.ignoreHours && !isBusinessHours()) reasons.push("fora do horário comercial (08–20h, dias úteis)");
   return { allowed: reasons.length === 0, reasons };
 }

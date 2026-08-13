@@ -32,8 +32,11 @@ export async function dispatchStep(lead: Lead, step: string): Promise<DispatchRe
   let waLink: string | undefined;
   const now = new Date().toISOString();
 
-  if (lead.telefone) {
-    const wa = await sendWhatsApp(lead.telefone, text);
+  // O celular minerado do site tem WhatsApp; o telefone da Receita costuma ser
+  // PABX fixo, que não tem. Preferir sempre o celular.
+  const numeroWhatsapp = lead.whatsapp ?? lead.telefone;
+  if (numeroWhatsapp) {
+    const wa = await sendWhatsApp(numeroWhatsapp, text);
     const status = wa.status === "enviado" ? "enviado" : wa.status === "assistido" ? "assistido" : "bloqueado";
     if (wa.status === "assistido") waLink = wa.detail;
     attempts.push({ step, channel: "whatsapp", message: text, status, detail: wa.detail, at: now });

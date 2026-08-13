@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
+import FindWhatsappButton from "@/components/FindWhatsappButton";
 import QualifyButton from "@/components/QualifyButton";
 import type { Lead } from "@/lib/types";
 
@@ -22,18 +23,24 @@ export default async function LeadsPage() {
   const leads = await listLeads();
   const abordaveis = leads.filter((l) => l.score?.potential === "A" || l.score?.potential === "B");
   const enriquecidos = leads.filter((l) => l.enriched_at).length;
+  // sem celular não existe outbound: o telefone da Receita é PABX fixo
+  const comWhatsapp = leads.filter((l) => l.whatsapp).length;
 
   return (
     <main>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>Tabela de Leads</h1>
-          <p className="sub" style={{ marginTop: 0 }}>{leads.length} leads · {abordaveis.length} aprováveis (A/B) · {enriquecidos} enriquecidos. Só A e B liberam o botão de aprovar.</p>
+          <p className="sub" style={{ marginTop: 0 }}>
+            {leads.length} leads · {abordaveis.length} aprováveis (A/B) · {enriquecidos} enriquecidos ·{" "}
+            <b style={{ color: comWhatsapp ? "#2e9e6b" : "var(--danger)" }}>{comWhatsapp} com WhatsApp</b>. Só A e B liberam o botão de aprovar.
+          </p>
         </div>
         {leads.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
             <QualifyButton />
             <BatchEnrichButton />
+            <FindWhatsappButton />
           </div>
         )}
       </div>

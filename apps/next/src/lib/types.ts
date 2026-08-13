@@ -248,6 +248,9 @@ export interface Lead {
   instagram?: string;
   contato_nome?: string;
   telefone?: string; // E.164 sem símbolos p/ wa.me (ex: 5541999999999)
+  whatsapp?: string; // CELULAR com WhatsApp, minerado do site (§ whatsapp-finder)
+  whatsapp_fonte?: string; // wa.me | api.whatsapp | texto — e a URL de origem
+  whatsapp_at?: string; // ISO — quando foi encontrado
   email?: string;
 
   // sinais coletados (públicos) usados no score
