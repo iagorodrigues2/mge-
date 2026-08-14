@@ -251,6 +251,7 @@ export interface Lead {
   whatsapp?: string; // CELULAR com WhatsApp, minerado do site (§ whatsapp-finder)
   whatsapp_fonte?: string; // wa.me | api.whatsapp | texto — e a URL de origem
   whatsapp_at?: string; // ISO — quando foi encontrado
+  whatsapp_tentado_at?: string; // ISO — última varredura (achando ou não): faz a fila andar
   email?: string;
 
   // sinais coletados (públicos) usados no score

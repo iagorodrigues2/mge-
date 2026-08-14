@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listLeads, upsertLead } from "@/lib/db";
-import { descobrirWhatsapp } from "@/lib/whatsapp-finder";
+import { descobrirWhatsappDetalhado } from "@/lib/whatsapp-finder";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,6 +17,7 @@ export async function POST(req: Request) {
   const leads = await listLeads();
   const candidatos = leads.filter((l) => {
     if (!refazer && l.whatsapp) return false; // já tem
+    if (!refazer && l.whatsapp_tentado_at) return false; // já varremos: a fila precisa ANDAR
     if (l.opt_out) return false;
     const site = l.website ?? "";
     // perfil de marketplace não é site da empresa — não publica WhatsApp
@@ -26,19 +27,23 @@ export async function POST(req: Request) {
   const lote = candidatos.slice(0, limite);
   let encontrados = 0;
   const achados: { empresa: string; whatsapp: string; fonte: string }[] = [];
+  const diagnostico: Record<string, number> = {};
 
   // sequencial de propósito: sites lentos + orçamento de 60s da serverless
   for (const lead of lote) {
-    const r = await descobrirWhatsapp(lead.website!, { timeoutMs: 4000, budgetMs: 9000 });
-    if (r) {
-      lead.whatsapp = r.numero;
-      lead.whatsapp_fonte = `${r.fonte} — ${r.origem}`;
-      lead.whatsapp_at = new Date().toISOString();
-      lead.updatedAt = lead.whatsapp_at;
-      await upsertLead(lead);
+    const r = await descobrirWhatsappDetalhado(lead.website!, { timeoutMs: 4000, budgetMs: 9000 });
+    const agora = new Date().toISOString();
+    lead.whatsapp_tentado_at = agora; // marca SEMPRE, achando ou não
+    diagnostico[r.motivo] = (diagnostico[r.motivo] ?? 0) + 1;
+    if (r.achado) {
+      lead.whatsapp = r.achado.numero;
+      lead.whatsapp_fonte = `${r.achado.fonte} — ${r.achado.origem}`;
+      lead.whatsapp_at = agora;
       encontrados++;
-      achados.push({ empresa: lead.empresa, whatsapp: r.numero, fonte: r.fonte });
+      achados.push({ empresa: lead.empresa, whatsapp: r.achado.numero, fonte: r.achado.fonte });
     }
+    lead.updatedAt = agora;
+    await upsertLead(lead);
   }
 
   // relê a base: os leads deste lote já foram salvos, então somar seria contar
@@ -52,5 +57,8 @@ export async function POST(req: Request) {
     achados,
     restantes: Math.max(0, candidatos.length - lote.length),
     comWhatsappNaBase,
+    // "bloqueado" em massa = o IP do servidor está barrado (Cloudflare);
+    // "ok" sem achado = o site realmente não publica WhatsApp.
+    diagnostico,
   });
 }

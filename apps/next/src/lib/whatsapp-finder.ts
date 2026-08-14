@@ -80,7 +80,15 @@ export function extrairWhatsapp(html: string, origem = ""): WhatsappAchado[] {
 }
 
 // HTML CRU — diferente do cnpj-finder, aqui as tags importam (o href do link).
-async function fetchHtml(url: string, timeoutMs: number): Promise<string | null> {
+// Motivo da falha — sem isso é impossível saber por que a mineração não achou
+// nada em produção mas achou 23% rodando local (IP de datacenter é bloqueado
+// por Cloudflare em muitos sites brasileiros).
+export type MotivoFalha = "timeout" | "http" | "bloqueado" | "nao_html" | "rede" | "ok";
+
+async function fetchHtml(
+  url: string,
+  timeoutMs: number,
+): Promise<{ html: string | null; motivo: MotivoFalha; status?: number }> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -89,15 +97,21 @@ async function fetchHtml(url: string, timeoutMs: number): Promise<string | null>
       redirect: "follow",
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
       },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // 403/503 com IP de datacenter = anti-bot (Cloudflare e afins)
+      const motivo: MotivoFalha = res.status === 403 || res.status === 503 ? "bloqueado" : "http";
+      return { html: null, motivo, status: res.status };
+    }
     const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("html") && !ct.includes("text")) return null;
-    return await res.text();
-  } catch {
-    return null;
+    if (!ct.includes("html") && !ct.includes("text")) return { html: null, motivo: "nao_html", status: res.status };
+    return { html: await res.text(), motivo: "ok", status: res.status };
+  } catch (e) {
+    const abortado = (e as Error).name === "AbortError";
+    return { html: null, motivo: abortado ? "timeout" : "rede" };
   } finally {
     clearTimeout(t);
   }
@@ -119,20 +133,38 @@ export async function descobrirWhatsapp(
   site: string,
   opts: { timeoutMs?: number; budgetMs?: number } = {},
 ): Promise<WhatsappAchado | null> {
+  return (await descobrirWhatsappDetalhado(site, opts)).achado;
+}
+
+// Versão com diagnóstico: diz POR QUE não achou, o que permite distinguir "o
+// site não publica WhatsApp" de "o servidor foi bloqueado".
+export async function descobrirWhatsappDetalhado(
+  site: string,
+  opts: { timeoutMs?: number; budgetMs?: number } = {},
+): Promise<{ achado: WhatsappAchado | null; motivo: MotivoFalha; status?: number; paginasLidas: number }> {
   const origin = originOf(site);
-  if (!origin) return null;
+  if (!origin) return { achado: null, motivo: "rede", paginasLidas: 0 };
   const timeoutMs = opts.timeoutMs ?? 4000;
   const budgetMs = opts.budgetMs ?? 12000;
   const started = Date.now();
+  let pior: MotivoFalha = "rede";
+  let status: number | undefined;
+  let paginasLidas = 0;
 
   for (const path of PAGINAS) {
     if (Date.now() - started > budgetMs) break;
-    const html = await fetchHtml(origin + path, timeoutMs);
-    if (!html) continue;
-    const achados = extrairWhatsapp(html, origin + path);
+    const r = await fetchHtml(origin + path, timeoutMs);
+    if (r.status !== undefined) status = r.status;
+    if (!r.html) {
+      if (pior !== "ok") pior = r.motivo;
+      continue;
+    }
+    pior = "ok";
+    paginasLidas++;
+    const achados = extrairWhatsapp(r.html, origin + path);
     // link explícito vale mais que número solto no texto
     const melhor = achados.find((a) => a.fonte !== "texto") ?? achados[0];
-    if (melhor) return melhor;
+    if (melhor) return { achado: melhor, motivo: "ok", status, paginasLidas };
   }
-  return null;
+  return { achado: null, motivo: pior, status, paginasLidas };
 }
