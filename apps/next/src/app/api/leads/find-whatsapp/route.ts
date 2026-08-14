@@ -10,13 +10,19 @@ export const maxDuration = 60;
 // Receita são PABX fixo. Roda em lote pequeno por causa do limite de 60s da
 // Vercel Hobby; chame várias vezes até `restantes` chegar a zero.
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { limite?: number; refazer?: boolean };
+  const body = (await req.json().catch(() => ({}))) as {
+    limite?: number; refazer?: boolean; repescar?: boolean;
+  };
   const limite = Math.min(Math.max(body.limite ?? 8, 1), 15);
   const refazer = body.refazer === true;
+  // Repescagem: sites que falharam por rede/timeout merecem nova chance — a
+  // falha foi do momento, não significa que a empresa não publica WhatsApp.
+  const repescar = body.repescar === true;
 
   const leads = await listLeads();
   const candidatos = leads.filter((l) => {
-    if (!refazer && l.whatsapp) return false; // já tem
+    if (l.whatsapp) return refazer; // já tem número
+    if (repescar) return true; // tentar de novo quem falhou
     if (!refazer && l.whatsapp_tentado_at) return false; // já varremos: a fila precisa ANDAR
     if (l.opt_out) return false;
     const site = l.website ?? "";
