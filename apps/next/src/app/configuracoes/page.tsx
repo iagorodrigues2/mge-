@@ -1,5 +1,7 @@
 import { listPackages, activeBackend } from "@/lib/db";
+import { activeLlm } from "@/lib/llm";
 import PriceEditor from "@/components/PriceEditor";
+import TestarIaButton from "@/components/TestarIaButton";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,8 @@ export default async function ConfiguracoesPage() {
   const waOn = Boolean(env.WHATSAPP_BUSINESS_TOKEN && env.WHATSAPP_BUSINESS_PHONE_ID);
   const emailOn = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
   const backend = activeBackend();
+  const llm = activeLlm();
+  const iaOn = llm !== "none";
 
   return (
     <main>
@@ -38,8 +42,12 @@ export default async function ConfiguracoesPage() {
           hint="Defina WHATSAPP_BUSINESS_TOKEN + WHATSAPP_BUSINESS_PHONE_ID. Sem isso, a aprovação gera link wa.me (envio assistido)." />
         <Status on={emailOn} label="E-mail (SMTP)"
           hint="Defina SMTP_HOST/PORT/USER/PASS/FROM. Sem isso, o e-mail vira rascunho." />
+        <Status on={iaOn} label={`Cérebro da IA (agente Vendedor)${iaOn ? ` — ${llm}` : ""}`}
+          hint="Defina ANTHROPIC_API_KEY (e ANTHROPIC_MODEL) nas variáveis de ambiente. Sem isso o agente Vendedor não conversa. Presença da chave ≠ chave válida: use o teste abaixo." />
+        <TestarIaButton />
         <p className="hint" style={{ marginTop: 12 }}>
-          Depois de editar o <code>.env.local</code>, reinicie o servidor para as chaves entrarem em vigor.
+          Na Vercel, variável nova só vale <b>depois do Redeploy</b> (Deployments → ⋯ → Redeploy).
+          No local, reinicie o servidor após editar o <code>.env.local</code>.
         </p>
       </div>
 
