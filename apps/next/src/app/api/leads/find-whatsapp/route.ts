@@ -21,13 +21,16 @@ export async function POST(req: Request) {
 
   const leads = await listLeads();
   const candidatos = leads.filter((l) => {
-    if (l.whatsapp) return refazer; // já tem número
-    if (repescar) return true; // tentar de novo quem falhou
-    if (!refazer && l.whatsapp_tentado_at) return false; // já varremos: a fila precisa ANDAR
     if (l.opt_out) return false;
+    // Perfil de marketplace NÃO é site da empresa e nunca publica WhatsApp de
+    // seller — este filtro vale SEMPRE, inclusive na repescagem (senão a fila
+    // engole os 600 perfis do ML e nunca chega nas empresas de verdade).
     const site = l.website ?? "";
-    // perfil de marketplace não é site da empresa — não publica WhatsApp
-    return !!site && !/mercadolivre|mercadolibre|amazon\.|shopee|ficticio|exemplo/i.test(site);
+    if (!site || /mercadolivre|mercadolibre|amazon\.|shopee|ficticio|exemplo/i.test(site)) return false;
+
+    if (l.whatsapp) return refazer; // já tem número
+    if (repescar) return true; // falhou antes: merece nova chance
+    return refazer || !l.whatsapp_tentado_at; // a fila precisa ANDAR
   });
 
   const lote = candidatos.slice(0, limite);
