@@ -10,6 +10,11 @@ export const maxDuration = 60;
 //
 // Só roda em horário comercial: a compliance já barra o disparo fora dele, mas
 // deixar o cron rodando de madrugada só encheria o log de bloqueios.
+//
+// GOTCHA QUE QUEBROU O DEPLOY: o plano Hobby da Vercel só aceita cron UMA VEZ
+// POR DIA. Agendar "0 12,18 * * 1-5" faz o deploy FALHAR — e, pior, derruba
+// todos os deploys seguintes até alguém perceber. Por isso é "0 12 * * *"
+// (09:00 BRT, diário). Só mude para várias vezes ao dia no plano Pro.
 function autorizado(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true; // não configurado: não trava o piloto
