@@ -294,6 +294,7 @@ export interface Lead {
   sdr?: SdrState; // estado do diagnóstico conduzido pela IA (fase, slots, business case)
   handoff_reason?: string; // por que o Porteiro escalou pro Iago
   handoff_at?: string; // ISO — quando escalou pro fechamento
+  porteiro_avisos?: string[]; // motivos já avisados ao Iago (evita e-mail repetido)
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;

@@ -24,6 +24,7 @@ import {
   AGENDA_INTEGRADA, checarResposta, contaPerguntas, corrigirIdentidade, detectaFadiga,
   type FatosDoLead, respostaDeSeguranca, semSaudacoes, valoresCitados,
 } from "./sdr-guards";
+import { avisarIago, type AvisoResult, type MotivoPorteiro } from "./porteiro";
 
 const AGENDA_URL = process.env.AGENDA_URL || ""; // link de agendamento do Iago, se houver
 
@@ -721,4 +722,30 @@ export function applySdrTurn(lead: Lead, incoming: string, turn: SdrTurn): Lead 
   }
   lead.updatedAt = now;
   return lead;
+}
+
+// PORTEIRO — avisa o Iago depois que o turno foi aplicado. Fica separado de
+// `applySdrTurn` de propósito: aquela é síncrona e usada em vários lugares;
+// mandar e-mail é I/O e não pode mudar a assinatura dela.
+// Chame logo após aplicar o turno, e persista o lead depois (grava o controle
+// de avisos já enviados).
+export async function notificarPorteiro(lead: Lead, turn: SdrTurn): Promise<AvisoResult | null> {
+  const state = turn.state ?? lead.sdr;
+  if (!state) return null;
+
+  // Prioridade: quem quer falar AGORA vem antes de quem só quer fechar.
+  const motivo: MotivoPorteiro | null =
+    state.signals.reuniaoImediata ? "reuniao_imediata"
+    : turn.action === "handoff_fechamento" ? "handoff_fechamento"
+    : turn.action === "agendar" ? "agendar"
+    : null;
+  if (!motivo) return null;
+
+  const jaAvisados = lead.porteiro_avisos ?? [];
+  if (jaAvisados.includes(motivo)) return null; // não encher a caixa do Iago
+
+  const r = await avisarIago(lead, state, motivo);
+  // só marca como avisado se realmente saiu — senão tentamos de novo no próximo turno
+  if (r.status === "enviado") lead.porteiro_avisos = [...jaAvisados, motivo];
+  return r;
 }
