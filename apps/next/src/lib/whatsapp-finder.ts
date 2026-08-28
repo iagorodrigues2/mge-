@@ -45,6 +45,25 @@ export function normalizarCelular(bruto: string): string | null {
   return d;
 }
 
+
+// O WhatsApp entrega o remetente brasileiro SEM o nono digito: manda
+// 55 + DDD + 8 digitos, enquanto o numero real tem 9. Responder ao numero como
+// veio faz a mensagem ir para um numero que nao existe — e no numero de teste
+// da erro (#131030) "not in allowed list", que foi exatamente o que aconteceu.
+// Celular brasileiro pos-2012 sempre tem 9 na frente, entao da pra reconstruir.
+export function normalizarRemetenteBR(bruto: string): string {
+  const d = (bruto ?? "").replace(/\D/g, "");
+  if (!d.startsWith("55")) return d; // nao e Brasil: nao mexe
+  if (d.length !== 12) return d; // ja tem 13 (com o 9) ou e fixo
+  const ddd = Number(d.slice(2, 4));
+  if (!DDDS_VALIDOS.has(ddd)) return d;
+  const resto = d.slice(4); // 8 digitos
+  // Celular antigo (8 digitos) comeca com 6,7,8 ou 9; fixo comeca com 2,3,4 ou 5.
+  // So o celular ganha o nono digito — mexer em fixo criaria numero inexistente.
+  if (!/^[6-9]/.test(resto)) return d;
+  return `55${d.slice(2, 4)}9${resto}`;
+}
+
 // Links diretos de WhatsApp publicados no site.
 const LINK_RES: { re: RegExp; fonte: WhatsappAchado["fonte"] }[] = [
   { re: /(?:https?:)?\/\/(?:api\.)?wa\.me\/(?:\+?55)?(\d[\d\s\-().]{9,16})/gi, fonte: "wa.me" },

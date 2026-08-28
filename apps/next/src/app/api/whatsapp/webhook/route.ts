@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { addOptOut, listLeads, upsertLead } from "@/lib/db";
 import { applySdrTurn, notificarPorteiro, sdrRespond } from "@/lib/ai-sdr";
 import { sendWhatsApp } from "@/lib/whatsapp";
+import { normalizarRemetenteBR } from "@/lib/whatsapp-finder";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -101,7 +102,10 @@ export async function POST(req: Request) {
       const nomePerfil = change.value?.contacts?.[0]?.profile?.name;
 
       for (const m of mensagens) {
-        const from = m.from ?? "";
+        // O WhatsApp entrega o remetente BR sem o nono digito. Responder ao
+        // numero como veio manda a mensagem pro vazio — foi o que derrubou
+        // todas as respostas da IA (#131030 "not in allowed list").
+        const from = normalizarRemetenteBR(m.from ?? "");
         const texto = textoDaMensagem(m);
         if (!from || !texto) continue;
 
@@ -164,7 +168,8 @@ export async function POST(req: Request) {
           // falhar numa conversa comercial.
           let envio: string | undefined;
           if (turn.reply) {
-            const wa = await sendWhatsApp(from, turn.reply);
+            const destino = lead.whatsapp && lead.whatsapp.length >= 13 ? lead.whatsapp : from;
+            const wa = await sendWhatsApp(destino, turn.reply);
             envio = wa.status;
             lead.attempts = [
               ...(lead.attempts ?? []),
