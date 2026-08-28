@@ -93,7 +93,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }); // corpo inesperado: não faz a Meta reenviar
   }
 
-  const processadas: { de: string; acao?: string; erro?: string }[] = [];
+  const processadas: { de: string; acao?: string; erro?: string; envio?: string }[] = [];
 
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
@@ -157,10 +157,31 @@ export async function POST(req: Request) {
           }
 
           applySdrTurn(lead, texto, turn);
-          if (turn.reply) await sendWhatsApp(from, turn.reply);
+
+          // O envio PRECISA ser registrado. Antes o resultado era descartado:
+          // se a Meta recusasse, a IA "respondia" no banco, o lead nunca via
+          // nada e ninguém ficava sabendo. Falha silenciosa é o pior modo de
+          // falhar numa conversa comercial.
+          let envio: string | undefined;
+          if (turn.reply) {
+            const wa = await sendWhatsApp(from, turn.reply);
+            envio = wa.status;
+            lead.attempts = [
+              ...(lead.attempts ?? []),
+              {
+                step: "resposta_ia",
+                channel: "whatsapp",
+                message: turn.reply,
+                status: wa.status === "enviado" ? "enviado" : "bloqueado",
+                detail: wa.detail,
+                at: new Date().toISOString(),
+              },
+            ];
+          }
+
           await notificarPorteiro(lead, turn); // muta porteiro_avisos
           await upsertLead(lead);
-          processadas.push({ de: from, acao: turn.action });
+          processadas.push({ de: from, acao: turn.action, envio });
         } catch (e) {
           processadas.push({ de: from, erro: (e as Error).message });
         }
