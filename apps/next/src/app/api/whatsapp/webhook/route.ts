@@ -165,8 +165,23 @@ export async function POST(req: Request) {
 
           const turn = await sdrRespond(lead, texto);
           if (!turn.ok) {
-            // não perde a fala do lead mesmo com a IA fora do ar
+            // não perde a fala do lead mesmo com a IA fora do ar, e registra o
+            // motivo em attempts — sem isso a falha era só um "processadas.erro"
+            // que morria na resposta HTTP do webhook, ninguém via de novo (foi
+            // o que exigiu investigação manual quando o crédito da Anthropic
+            // acabou em 2026-09-03; agora aparece direto no lead).
             lead.conversation = [...(lead.conversation ?? []), { role: "lead", text: texto, at: new Date().toISOString() }];
+            lead.attempts = [
+              ...(lead.attempts ?? []),
+              {
+                step: "resposta_ia",
+                channel: "whatsapp",
+                message: texto,
+                status: "bloqueado",
+                detail: `IA não respondeu: ${turn.error ?? "erro desconhecido"}`,
+                at: new Date().toISOString(),
+              },
+            ];
             await upsertLead(lead);
             processadas.push({ de: from, erro: turn.error });
             continue;
