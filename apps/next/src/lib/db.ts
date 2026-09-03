@@ -12,6 +12,7 @@ export interface Store {
   getLead(id: string): Promise<Lead | undefined>;
   upsertLead(lead: Lead): Promise<Lead>;
   addOptOut(key: string): Promise<void>;
+  removeOptOut(key: string): Promise<void>;
   isOptedOut(...keys: (string | undefined)[]): Promise<boolean>;
   isBlocked(...keys: (string | undefined)[]): Promise<boolean>;
   listPackages(): Promise<ServicePackage[]>;
@@ -39,6 +40,7 @@ export const listLeads = () => store.listLeads();
 export const getLead = (id: string) => store.getLead(id);
 export const upsertLead = (lead: Lead) => store.upsertLead(lead);
 export const addOptOut = (key: string) => store.addOptOut(key);
+export const removeOptOut = (key: string) => store.removeOptOut(key);
 export const isOptedOut = (...keys: (string | undefined)[]) => store.isOptedOut(...keys);
 export const isBlocked = (...keys: (string | undefined)[]) => store.isBlocked(...keys);
 export const listPackages = () => store.listPackages();

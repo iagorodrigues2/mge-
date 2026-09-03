@@ -101,6 +101,12 @@ export const pgStore: Store = {
     if (k) await sql`insert into mge_opt_out (key) values (${k}) on conflict (key) do nothing`;
   },
 
+  async removeOptOut(key) {
+    const sql = await ensure();
+    const k = key.trim().toLowerCase();
+    if (k) await sql`delete from mge_opt_out where key = ${k}`;
+  },
+
   async isOptedOut(...keys) {
     const sql = await ensure();
     const norm = keys.filter(Boolean).map((k) => k!.trim().toLowerCase());

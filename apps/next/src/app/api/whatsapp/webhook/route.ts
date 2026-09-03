@@ -79,6 +79,18 @@ function acharLead(leads: Lead[], from: string): Lead | undefined {
 
 const PEDIU_PARA_PARAR = /^(sair|parar|remover|descadastrar|stop|nao quero|não quero|pare de|me tira)/i;
 
+// A regra acima é só o PREFIXO — sozinha ela também batia em qualquer frase
+// longa que começasse por acaso com essas palavras ("não quero pagar isso
+// agora, mas..."), descadastrando o lead no meio de uma objeção normal e
+// calando o agente sem ninguém perceber (foi o que "parou o robô" no teste de
+// 2026-09-03). Descadastro de verdade é frase CURTA e direta — exige também
+// no máximo 6 palavras pra não confundir objeção com pedido de sair da lista.
+function pediuParaParar(texto: string): boolean {
+  if (!PEDIU_PARA_PARAR.test(texto.trim())) return false;
+  const palavras = texto.trim().split(/\s+/).filter(Boolean);
+  return palavras.length <= 6;
+}
+
 export async function POST(req: Request) {
   const raw = await req.text();
   if (!assinaturaValida(raw, req.headers.get("x-hub-signature-256"))) {
@@ -135,7 +147,7 @@ export async function POST(req: Request) {
           }
 
           // Opt-out tem precedência sobre tudo — nem chama a IA.
-          if (PEDIU_PARA_PARAR.test(texto)) {
+          if (pediuParaParar(texto)) {
             lead.opt_out = true;
             lead.stage = "opt_out";
             lead.updatedAt = new Date().toISOString();

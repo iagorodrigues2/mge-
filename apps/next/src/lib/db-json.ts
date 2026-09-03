@@ -70,6 +70,13 @@ export const jsonStore: Store = {
     await persist();
   },
 
+  async removeOptOut(key) {
+    const db = await ensure();
+    const k = key.trim().toLowerCase();
+    db.optOut = db.optOut.filter((s) => s.toLowerCase() !== k);
+    await persist();
+  },
+
   async isOptedOut(...keys) {
     const db = await ensure();
     const set = new Set(db.optOut.map((s) => s.toLowerCase()));
