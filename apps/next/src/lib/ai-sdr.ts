@@ -8,7 +8,7 @@
 // ancorar um valor que não recebeu. `sdr-guards.ts` confere a saída.
 //
 // O Iago só entra no fechamento — a IA cuida do resto.
-import { llmChat, activeLlm, type LlmMessage } from "./llm";
+import { llmChat, activeLlm, type LlmMessage, type LlmSystem } from "./llm";
 import { listPackages } from "./db";
 import type {
   CapacidadeExecucao, ConversationMsg, DiscoverySlot, FaixaVolume, Lead, NecessidadeTipo,
@@ -489,6 +489,12 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
     role: c.role === "ia" ? "assistant" : "user",
     content: c.text,
   }));
+  // O histórico só cresce por append — o que já existia é idêntico ao da
+  // chamada anterior. Marcando a última mensagem PRÉ-existente como fim de
+  // cache, a Anthropic reaproveita esse prefixo inteiro (era o maior custo
+  // da conversa de teste de hoje: histórico crescendo turno a turno, sempre
+  // reenviado do zero) e só cobra cheio a fala nova.
+  if (history.length > 0) history[history.length - 1].cache = true;
   history.push({ role: "user", content: incoming });
 
   const base = await buildSystemPrompt(lead, state, pacotes);
@@ -500,11 +506,14 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   let ultimoErro: string | undefined;
 
   for (let tentativa = 0; tentativa < 2; tentativa++) {
-    const system = tentativa === 0
+    // `base` fica no bloco cacheado nas duas tentativas — só a correção
+    // (que muda) vai em `extra`, fora do cache, senão a tentativa 2 nunca
+    // reaproveitaria o prefixo da tentativa 1.
+    const system: LlmSystem = tentativa === 0
       ? base
-      : `${base}\n\n---\n\nCORREÇÃO OBRIGATÓRIA: sua resposta anterior violou regras do Prompt Mestre:\n${violacoes.map((x) => `- ${x}`).join("\n")}\nReescreva a mensagem corrigindo isso. Mantenha o mesmo JSON.`;
+      : { cached: base, extra: `\n\n---\n\nCORREÇÃO OBRIGATÓRIA: sua resposta anterior violou regras do Prompt Mestre:\n${violacoes.map((x) => `- ${x}`).join("\n")}\nReescreva a mensagem corrigindo isso. Mantenha o mesmo JSON.` };
 
-    const r = await llmChat(system, history, { json: true, maxTokens: 1200 });
+    const r = await llmChat(system, history, { json: true, maxTokens: 1200, cacheSystem: true });
     backend = r.backend;
     if (!r.ok) { ultimoErro = r.error; break; }
 
@@ -562,8 +571,11 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
     if (conflita && escolhido) {
       const sistema = await buildSystemPrompt(lead, novoEstado, pacotes);
       const r2 = await llmChat(
-        `${sistema}\n\n---\n\nCORREÇÃO OBRIGATÓRIA: sua mensagem citou um valor de outro programa. A oferta correta para este lead, decidida pelo diagnóstico, é ${escolhido.nome} — R$ ${escolhido.precoRef.toLocaleString("pt-BR")} (motivo: ${novoEstado.ofertaMotivo}). Reescreva a mensagem usando SOMENTE este programa e este valor. Mantenha o mesmo JSON.`,
-        history, { json: true, maxTokens: 1200 },
+        {
+          cached: sistema,
+          extra: `\n\n---\n\nCORREÇÃO OBRIGATÓRIA: sua mensagem citou um valor de outro programa. A oferta correta para este lead, decidida pelo diagnóstico, é ${escolhido.nome} — R$ ${escolhido.precoRef.toLocaleString("pt-BR")} (motivo: ${novoEstado.ofertaMotivo}). Reescreva a mensagem usando SOMENTE este programa e este valor. Mantenha o mesmo JSON.`,
+        },
+        history, { json: true, maxTokens: 1200, cacheSystem: true },
       );
       if (r2.ok) {
         const p2 = parseTurn(r2.text);
