@@ -12,37 +12,29 @@ export async function POST(req: Request) {
   const now = new Date().toISOString();
 
   const state = emptyState("inbound");
-  state.discovery.motivo = { status: "confirmado", valor: "quer estruturar a operação de marketplace" };
-  state.discovery.problema = { status: "confirmado", valor: "margem caindo; custo do fornecedor nacional alto" };
-  state.discovery.situacao = { status: "confirmado", valor: "vende em ML e Amazon; equipe pequena" };
-  state.discovery.prioridade = { status: "confirmado", valor: "quer resolver nos próximos 90 dias" };
-  state.discovery.volume = { status: "confirmado", valor: "acima de R$100 mil/mês" };
-  state.signals = {
-    necessidade: "montar_operacao", capacidadeExecucao: "parcial",
-    problemaEconomico: true, faixaVolume: "acima_100k", ehDecisor: true,
-    reuniaoImediata: true, aceitouReuniao: true, problemaReal: true, aderencia: true,
-  };
+  state.nivel = "operador";
+  state.ofertaSugerida = "implantacao_360";
+  state.ofertaMotivo = "opera acima de R$100 mil/mês e a margem já caiu — precisa estruturar a operação como um todo, não só um diagnóstico pontual";
+  state.reuniaoImediata = true;
   state.sinaisIntencao = ["Sinal forte de intenção: lead solicitou reunião imediata"];
   state.riscos = ["opera com equipe pequena — checar capacidade de execução"];
-  state.score = {
-    fit: 8, dor: 10, impacto: 6, urgencia: 10, autoridade: 10, capacidade: 10,
-    confianca: 10, total: 64, provisorio: false, aConfirmar: [],
-  };
+  state.score = { interesse: "alto", motivo: "margem caindo, volume relevante, pediu falar agora" };
+  state.perguntasFeitas = 2;
 
   const lead: Lead = {
     id: "porteiro_test", empresa: "Meias do Igor", segmento: "Meias esportivas",
     cidade: "Curitiba", uf: "PR", whatsapp: "5541999680809", website: "https://exemplo.com.br",
     stage: "em_conversa", approved: true, opt_out: false, source: "teste", attempts: [],
     createdAt: now, updatedAt: now, sdr: state,
-    handoff_reason: "Dono, volume acima de R$100 mil/mês, quer resolver em 90 dias e pediu para falar agora.",
+    handoff_reason: "Dono, volume acima de R$100 mil/mês, margem caindo e pediu para falar agora.",
     conversation: [
       { role: "lead", text: "minha margem ta baixa demais", at: now },
-      { role: "ia", text: "Margem baixa em marketplace tem origens diferentes — pode ser precificação, estrutura de custo ou mix.", at: now },
-      { role: "lead", text: "consegue falar comigo daqui a 30 min?", at: now },
+      { role: "ia", text: "Margem baixa em marketplace tem origens diferentes — pode ser precificação, estrutura de custo ou mix. Hoje vocês já vendem em quais canais?", at: now },
+      { role: "lead", text: "ML e Amazon. consegue falar comigo daqui a 30 min?", at: now },
     ],
   };
 
-  const briefing = montarBriefing(lead, state, "reuniao_imediata");
+  const briefing = await montarBriefing(lead, state, "reuniao_imediata");
   if (!enviar) return NextResponse.json({ ok: true, enviado: false, briefing });
   const resultado = await avisarIago(lead, state, "reuniao_imediata");
   return NextResponse.json({ ok: true, enviado: true, resultado, briefing });

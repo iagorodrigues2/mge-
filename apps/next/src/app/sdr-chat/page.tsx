@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import type { ConversationMsg, SdrAction, SdrPhase, SdrState } from "@/lib/types";
+import type { ConversationMsg, SdrAction, SdrState } from "@/lib/types";
 
 const ACTION_INFO: Record<SdrAction, { label: string; color: string }> = {
   continuar: { label: "conversando", color: "#6b7684" },
@@ -11,58 +11,23 @@ const ACTION_INFO: Record<SdrAction, { label: string; color: string }> = {
   opt_out: { label: "opt-out", color: "#d64545" },
 };
 
-// A fase é calculada pela máquina, não pela IA — mostrar isso é o ponto: dá pra
-// ver que a oferta só aparece depois do diagnóstico e da conta.
-// Fluxo do chat (Correção §14). O diagnóstico profundo é da REUNIÃO.
-const FASES: { key: SdrPhase; label: string }[] = [
-  { key: "abertura", label: "abertura" },
-  { key: "motivo", label: "motivo" },
-  { key: "dor", label: "dor principal" },
-  { key: "contexto", label: "contexto" },
-  { key: "percepcao", label: "percepção útil" },
-  { key: "fit", label: "prioridade / fit" },
-  { key: "proximo_passo", label: "próximo passo" },
-];
-
-// As 4 camadas que o chat persegue.
-const SLOT_LABEL: Record<string, string> = {
-  motivo: "Motivo do contato", problema: "Dor principal",
-  situacao: "Contexto", prioridade: "Prioridade", volume: "Volume de compra",
+const NIVEL_LABEL: Record<string, string> = {
+  iniciante: "iniciante", operador: "operador", avancado: "avançado", desconhecida: "não caracterizado",
 };
 
-// Só aparecem se o lead falar por conta própria — não se persegue no chat.
-const SLOT_REUNIAO: Record<string, string> = {
-  causa: "Causa", impacto: "Impacto (R$)", capacidade: "Capacidade",
-  decisao: "Decisão", criterio: "Critério",
-};
+const INTERESSE_COR: Record<string, string> = { baixo: "var(--muted)", medio: "#d98e2b", alto: "#2e9e6b" };
 
 interface Turn {
   action?: SdrAction;
   motivo?: string;
 }
 
-// Espelha `podeAgendar` do servidor só para o indicador da tela (§16).
-function podeAgendarUI(s: SdrState | null): boolean {
-  if (!s) return false;
-  const sig = s.signals ?? {};
-  const problemaReal = s.discovery?.problema?.status === "confirmado" || sig.problemaReal === true;
-  const vontade = s.discovery?.prioridade?.status !== "desconhecido" || sig.vontadeResolver === true;
-  const volumeOk = s.discovery?.volume?.status !== "desconhecido" || (!!sig.faixaVolume && sig.faixaVolume !== "desconhecida");
-  return problemaReal && vontade && volumeOk && sig.aderencia !== false
-    && sig.possibilidadeContratacao !== false && !!s.percepcaoEntregue;
-}
-
-const FAIXA_LABEL: Record<string, string> = {
-  ate_20k: "até R$20 mil/mês", "20k_50k": "R$20-50 mil/mês",
-  "50k_100k": "R$50-100 mil/mês", acima_100k: "acima de R$100 mil/mês",
-};
-
 export default function SdrChatPage() {
   const [empresa, setEmpresa] = useState("Estofados Bariloche");
   const [segmento, setSegmento] = useState("Móveis e estofados");
   const [msgs, setMsgs] = useState<ConversationMsg[]>([]);
   const [meta, setMeta] = useState<Record<number, Turn>>({}); // índice da msg da IA → decisão
-  const [state, setState] = useState<SdrState | null>(null); // estado do diagnóstico
+  const [state, setState] = useState<SdrState | null>(null); // estado do Vendedor
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,10 +74,6 @@ export default function SdrChatPage() {
     setMsgs([]); setMeta({}); setError(null); setInput(""); setState(null);
   }
 
-  const faseAtual = state?.phase ?? "abertura";
-  const faseIdx = FASES.findIndex((f) => f.key === faseAtual);
-  const bc = state?.businessCase;
-
   return (
     <main style={{ maxWidth: 820, margin: "0 auto", padding: "24px 20px" }}>
       <h1 style={{ margin: "0 0 4px" }}>💬 Testar a IA Vendedora</h1>
@@ -130,86 +91,26 @@ export default function SdrChatPage() {
         <button className="btn ghost" onClick={reset}>Limpar conversa</button>
       </div>
 
-      {/* Painel do raciocínio: a oferta só destrava depois do diagnóstico + conta. */}
+      {/* Painel de raciocínio — CLAUDE V3: sem fases rígidas, o produto e o
+          nível se ajustam a cada turno em vez de destravar depois de um gate. */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-          {FASES.map((f, i) => (
-            <span key={f.key} className="badge" style={{
-              background: i < faseIdx ? "#2e9e6b" : i === faseIdx ? "var(--accent-2)" : "var(--panel-2)",
-              color: i <= faseIdx ? "#fff" : "var(--muted)",
-              border: "1px solid var(--border)",
-            }}>{i + 1}. {f.label}</span>
-          ))}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 8 }}>
-          {Object.entries(SLOT_LABEL).map(([slot, label]) => {
-            const f = state?.discovery?.[slot as keyof typeof state.discovery];
-            const st = f?.status ?? "desconhecido";
-            const cor = st === "confirmado" ? "#2e9e6b" : st === "hipotese" ? "#d98e2b" : "var(--muted)";
-            return (
-              <div key={slot} style={{ borderLeft: `3px solid ${cor}`, paddingLeft: 8 }}>
-                <div style={{ fontSize: 12, color: cor, fontWeight: 600 }}>
-                  {st === "confirmado" ? "✔" : st === "hipotese" ? "~" : "✗"} {label}
-                </div>
-                <div className="hint" style={{ fontSize: 12 }}>{f?.valor || "—"}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Orçamento de perguntas: o chat não é a consultoria (Correção §3/§7/§9) */}
-        <div style={{ marginTop: 10, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12 }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13, marginBottom: 10 }}>
+          <span>👤 Segmentação: <b>{NIVEL_LABEL[state?.nivel ?? "desconhecida"]}</b></span>
           <span style={{ color: (state?.perguntasFeitas ?? 0) > 6 ? "var(--danger)" : "var(--muted)" }}>
-            ❓ perguntas: <b>{state?.perguntasFeitas ?? 0}</b>/6
+            ❓ perguntas de qualificação: <b>{state?.perguntasFeitas ?? 0}</b>
           </span>
-          <span style={{ color: state?.percepcaoEntregue ? "#2e9e6b" : "#d98e2b" }}>
-            💡 percepção útil: <b>{state?.percepcaoEntregue ? "entregue" : "ainda não"}</b>
-          </span>
-          <span style={{ color: podeAgendarUI(state) ? "#2e9e6b" : "var(--muted)" }}>
-            📅 pronto p/ reunião: <b>{podeAgendarUI(state) ? "sim" : "ainda não"}</b>
-          </span>
-          {state?.fadigaDetectada && <span style={{ color: "var(--danger)" }}>⚠ lead cansou — ir direto ao ponto</span>}
         </div>
 
-        {/* O que o lead entregou de graça — não perseguimos isso no chat */}
-        {state && Object.entries(SLOT_REUNIAO).some(([s]) => state.discovery?.[s as keyof typeof state.discovery]?.status !== "desconhecido") && (
-          <div className="hint" style={{ marginTop: 8, fontSize: 12 }}>
-            🗓 o lead contou espontaneamente (fica pra reunião):{" "}
-            {Object.entries(SLOT_REUNIAO)
-              .filter(([s]) => state.discovery?.[s as keyof typeof state.discovery]?.status !== "desconhecido")
-              .map(([, l]) => l).join(", ")}
-          </div>
-        )}
+        <div className="hint" style={{ fontSize: 13 }}>
+          {state?.ofertaSugerida
+            ? <>🎯 <b>Oferta sugerida agora:</b> {state.ofertaSugerida} — {state.ofertaMotivo}</>
+            : <>— nenhuma oferta caracterizada ainda —</>}
+        </div>
 
-        {bc && (
-          <div style={{ marginTop: 12, padding: "9px 12px", background: "var(--panel-2)", borderRadius: 8, fontSize: 13 }}>
-            🧮 <b>Conta (§15):</b> R$ {bc.valorProjeto.toLocaleString("pt-BR")} ÷ {bc.mesesPayback} meses ={" "}
-            precisa gerar/preservar <b>R$ {bc.ganhoMensalNecessario.toLocaleString("pt-BR")}/mês</b>
-            {bc.impactoMensalEstimado != null && (
-              <> · impacto apurado: R$ {bc.impactoMensalEstimado.toLocaleString("pt-BR")}/mês →{" "}
-                <b style={{ color: bc.viavel ? "#2e9e6b" : "var(--danger)" }}>{bc.viavel ? "a conta fecha" : "a conta NÃO fecha"}</b>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Score = probabilidade e qualidade da oportunidade, não campos preenchidos */}
         {state?.score && (
           <div style={{ marginTop: 12, padding: "9px 12px", background: "var(--panel-2)", borderRadius: 8, fontSize: 13 }}>
-            <b style={{ color: state.score.total >= 45 ? "#2e9e6b" : state.score.total >= 30 ? "#d98e2b" : "var(--muted)" }}>
-              🌡 Score comercial {state.score.total}/70{state.score.provisorio ? " (provisório)" : ""}
-            </b>
-            <div className="hint" style={{ fontSize: 12, marginTop: 4 }}>
-              fit {state.score.fit} · dor {state.score.dor} · impacto {state.score.impacto} · urgência {state.score.urgencia}
-              {" "}· autoridade {state.score.autoridade} · capacidade {state.score.capacidade} · confiança {state.score.confianca}
-            </div>
-            {!!state.score.aConfirmar?.length && (
-              <div className="hint" style={{ fontSize: 12 }}>a confirmar: {state.score.aConfirmar.join(", ")}</div>
-            )}
-            {state.signals?.faixaVolume && state.signals.faixaVolume !== "desconhecida" && (
-              <div className="hint" style={{ fontSize: 12 }}>📦 volume: {FAIXA_LABEL[state.signals.faixaVolume]}</div>
-            )}
+            <b style={{ color: INTERESSE_COR[state.score.interesse] }}>🌡 Interesse: {state.score.interesse}</b>
+            {state.score.motivo && <div className="hint" style={{ fontSize: 12, marginTop: 4 }}>{state.score.motivo}</div>}
           </div>
         )}
 
@@ -220,12 +121,9 @@ export default function SdrChatPage() {
           </div>
         )}
 
-        <div className="hint" style={{ marginTop: 10, fontSize: 12 }}>
-          {state?.ofertaRecomendada
-            ? <>🎯 <b>Oferta liberada:</b> {state.ofertaRecomendada} — {state.ofertaMotivo}</>
-            : <>🔒 <b>Oferta e preço bloqueados</b> — {state?.ofertaMotivo || "o diagnóstico ainda não está pronto"}</>}
-          {!!state?.riscos?.length && <> · ⚠ risco: {state.riscos.join("; ")}</>}
-        </div>
+        {!!state?.riscos?.length && (
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--danger)" }}>⚠ risco: {state.riscos.join("; ")}</div>
+        )}
       </div>
 
       <div className="card" style={{ minHeight: 340, display: "flex", flexDirection: "column", gap: 12 }}>

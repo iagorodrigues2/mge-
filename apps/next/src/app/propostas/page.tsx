@@ -34,7 +34,7 @@ export default async function PropostasPage() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div className="score">{brl(p.valor)}</div>
-                  {pkg?.precoFundador && p.packageCode === "programa_anual" && (
+                  {pkg?.precoFundador && (
                     <div className="hint">tabela {brl(pkg.precoRef)} · fundador {brl(pkg.precoFundador)}</div>
                   )}
                 </div>

@@ -8,10 +8,15 @@ que continue este projeto.
 - O sistema vende os serviços de **Iago Rodrigues** (marketplace
   consulting/implantação: Mercado Livre, Amazon, Shopee). Não é uma agência
   de tráfego nem um curso.
-- Preços e ofertas **nunca são hard-coded**. Vivem em
-  `service_packages` / `price_versions` (seção 3 do prompt-mestre original).
-  Se você for adicionar uma tela ou endpoint que mostra preço, leia da
-  tabela — não escreva o valor no código.
+- Preços e ofertas **nunca são hard-coded**. Vivem na tabela de pacotes
+  (`ServicePackage`, editável em `/configuracoes`). Se você for adicionar uma
+  tela ou endpoint que mostra preço, leia da tabela — não escreva o valor no
+  código.
+- Fonte da verdade do COMPORTAMENTO COMERCIAL do agente Vendedor (apps/next):
+  `docs/claude-v3-maquina-de-vendas.md` (entregue pelo Iago em 2026-09-04,
+  substitui o `docs/prompt-mestre.md` antigo). Antes de mudar tom, catálogo,
+  scripts de objeção ou regra de opt-out em `apps/next/src/lib/ai-sdr.ts` /
+  `sdr-guards.ts`, leia esse documento primeiro.
 - Regras de compliance (`packages/agents/compliance.py`) são obrigatórias,
   não sugestões: sem envio automático de WhatsApp sem clique humano, sem
   contato fora do horário comercial, sem ignorar opt-out/blocklist, sem

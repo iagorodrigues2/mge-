@@ -3,15 +3,16 @@
 // Sem isso o handoff só marcava um campo no banco: a IA decidia "chama o Iago"
 // e ninguém ficava sabendo. O lead esfriava esperando.
 //
-// O e-mail não é um alerta seco: é o BRIEFING DA CALL que o Prompt Mestre §30
-// exige — empresa, dor, decisão, comercial e as perguntas ainda em aberto —
-// para o Iago entrar na conversa já sabendo do que se trata.
+// O e-mail não é um alerta seco: é o briefing da call — empresa, nível,
+// oferta que a conversa está apontando, riscos e as últimas mensagens — para
+// o Iago entrar na conversa já sabendo do que se trata. Como o CLAUDE V3 não
+// tem mais slots de descoberta estruturados, o "o que já sei" vem direto do
+// histórico da conversa em vez de um formulário preenchido pela máquina.
 
 import { sendEmail } from "./email";
-import { known } from "./sdr-state";
+import { listPackages } from "./db";
 import type { EmailResult } from "./email";
-import type { DiscoverySlot, Lead, SdrState } from "./types";
-import { DISCOVERY_ORDER, SLOTS_DO_CHAT } from "./types";
+import type { Lead, SdrState } from "./types";
 
 // Para quem avisar: IAGO_EMAIL, senão a própria conta do SMTP.
 function destinatario(): string | null {
@@ -30,11 +31,16 @@ function linha(rotulo: string, valor?: string): string {
   return valor ? `${rotulo}: ${valor}` : "";
 }
 
-// Monta o briefing (§30). Só inclui o que é VERDADE — nada de campo inventado.
-export function montarBriefing(lead: Lead, state: SdrState, motivo: MotivoPorteiro): string {
-  const d = state.discovery;
-  const sig = state.signals;
-  const sc = state.score;
+const NIVEL_LABEL: Record<SdrState["nivel"], string> = {
+  iniciante: "iniciante",
+  operador: "operador",
+  avancado: "avançado",
+  desconhecida: "não caracterizado ainda",
+};
+
+// Monta o briefing. Só inclui o que é VERDADE — nada de campo inventado.
+export async function montarBriefing(lead: Lead, state: SdrState, motivo: MotivoPorteiro): Promise<string> {
+  const pacotes = await listPackages();
 
   const empresa = [
     linha("Empresa", lead.nome_fantasia || lead.empresa),
@@ -45,27 +51,14 @@ export function montarBriefing(lead: Lead, state: SdrState, motivo: MotivoPortei
     linha("CNPJ", lead.cnpj),
   ].filter(Boolean).join("\n");
 
-  const descoberto = SLOTS_DO_CHAT
-    .filter((s: DiscoverySlot) => known(d[s]))
-    .map((s: DiscoverySlot) => `• ${s}: ${d[s].valor ?? "(sem detalhe)"}`)
-    .join("\n") || "• (nada confirmado ainda)";
-
-  const espontaneo = DISCOVERY_ORDER
-    .filter((s) => !SLOTS_DO_CHAT.includes(s) && known(d[s]))
-    .map((s) => `• ${s}: ${d[s].valor ?? ""}`)
-    .join("\n");
-
-  const emAberto = DISCOVERY_ORDER
-    .filter((s) => !known(d[s]))
-    .map((s) => `• ${s}`)
-    .join("\n") || "• (nada)";
+  const ofertaPkg = state.ofertaSugerida ? pacotes.find((p) => p.code === state.ofertaSugerida) : undefined;
 
   const comercial = [
-    sc ? `Score: ${sc.total}/70${sc.provisorio ? " (provisório)" : ""} — fit ${sc.fit}, dor ${sc.dor}, impacto ${sc.impacto}, urgência ${sc.urgencia}, autoridade ${sc.autoridade}, capacidade ${sc.capacidade}, confiança ${sc.confianca}` : "",
-    sig.faixaVolume && sig.faixaVolume !== "desconhecida" ? `Volume de compra: ${sig.faixaVolume.replace(/_/g, " ")}` : "",
-    state.ofertaRecomendada ? `Oferta indicada: ${state.ofertaRecomendada} — ${state.ofertaMotivo ?? ""}` : "Oferta: ainda não liberada (diagnóstico incompleto)",
-    sig.ehDecisor === true ? "É o decisor." : "",
-    state.businessCase?.impactoMensalEstimado ? `Impacto estimado: R$ ${state.businessCase.impactoMensalEstimado.toLocaleString("pt-BR")}/mês` : "",
+    `Segmentação: ${NIVEL_LABEL[state.nivel]}`,
+    state.score ? `Interesse: ${state.score.interesse}${state.score.motivo ? ` — ${state.score.motivo}` : ""}` : "",
+    state.ofertaSugerida
+      ? `Oferta que a conversa está apontando: ${ofertaPkg ? ofertaPkg.nome : state.ofertaSugerida}${state.ofertaMotivo ? ` — ${state.ofertaMotivo}` : ""}`
+      : "Oferta: ainda não caracterizada",
   ].filter(Boolean).join("\n");
 
   const riscos = (state.riscos ?? []).length
@@ -77,7 +70,7 @@ export function montarBriefing(lead: Lead, state: SdrState, motivo: MotivoPortei
     : "";
 
   const conversa = (lead.conversation ?? [])
-    .slice(-8)
+    .slice(-10)
     .map((c) => `${c.role === "lead" ? "LEAD" : "IA  "}: ${c.text}`)
     .join("\n\n");
 
@@ -89,14 +82,8 @@ ${lead.handoff_reason || state.ofertaMotivo || "(sem motivo registrado)"}${inten
 EMPRESA
 ${empresa}
 
-O QUE JÁ SEI
-${descoberto}${espontaneo ? `\n\nQUE ELE CONTOU POR CONTA PRÓPRIA (era pra ser da reunião)\n${espontaneo}` : ""}
-
 COMERCIAL
 ${comercial}
-
-AINDA EM ABERTO (descobrir na conversa)
-${emAberto}
 
 ÚLTIMAS MENSAGENS
 ${conversa || "(sem conversa registrada)"}
@@ -118,7 +105,7 @@ export async function avisarIago(
   const para = destinatario();
   if (!para) return { status: "rascunho", detail: "IAGO_EMAIL/SMTP_USER não configurado" };
   try {
-    const corpo = montarBriefing(lead, state, motivo);
+    const corpo = await montarBriefing(lead, state, motivo);
     const assunto = `${ASSUNTO[motivo]} — ${lead.nome_fantasia || lead.empresa}`;
     const r = await sendEmail(para, assunto, corpo);
     return { ...r, para };

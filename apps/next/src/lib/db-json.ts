@@ -108,6 +108,14 @@ export const jsonStore: Store = {
     return pkg;
   },
 
+  // Substitui o catálogo inteiro (troca de matriz comercial) — não é um
+  // upsert por code, é "esquece o antigo e usa este".
+  async resetPackages(pacotes) {
+    const db = await ensure();
+    db.packages = pacotes;
+    await persist();
+  },
+
   async listProposals() {
     const db = await ensure();
     return [...db.proposals].sort((a, b) => b.createdAt.localeCompare(a.createdAt));

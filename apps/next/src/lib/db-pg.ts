@@ -142,6 +142,19 @@ export const pgStore: Store = {
     return pkg;
   },
 
+  // Substitui o catálogo inteiro (troca de matriz comercial) — apaga os codes
+  // antigos e insere os novos numa transação, pra nunca ficar com os dois
+  // catálogos misturados se a chamada falhar no meio.
+  async resetPackages(pacotes) {
+    const sql = await ensure();
+    await sql.begin(async (tx) => {
+      await tx`delete from mge_packages`;
+      for (const p of pacotes) {
+        await tx`insert into mge_packages (code, data) values (${p.code}, ${tx.json(p as never)})`;
+      }
+    });
+  },
+
   async listProposals() {
     const sql = await ensure();
     const rows = await sql<{ data: Proposal }[]>`select data from mge_proposals`;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { addOptOut, listLeads, upsertLead } from "@/lib/db";
 import { applySdrTurn, notificarPorteiro, sdrRespond } from "@/lib/ai-sdr";
+import { pediuParaParar } from "@/lib/sdr-guards";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { normalizarRemetenteBR } from "@/lib/whatsapp-finder";
 import type { Lead } from "@/lib/types";
@@ -75,20 +76,6 @@ function acharLead(leads: Lead[], from: string): Lead | undefined {
     const cand = [so(l.whatsapp), so(l.telefone)].filter(Boolean);
     return cand.some((c) => c === f || c.slice(-8) === fim);
   });
-}
-
-const PEDIU_PARA_PARAR = /^(sair|parar|remover|descadastrar|stop|nao quero|não quero|pare de|me tira)/i;
-
-// A regra acima é só o PREFIXO — sozinha ela também batia em qualquer frase
-// longa que começasse por acaso com essas palavras ("não quero pagar isso
-// agora, mas..."), descadastrando o lead no meio de uma objeção normal e
-// calando o agente sem ninguém perceber (foi o que "parou o robô" no teste de
-// 2026-09-03). Descadastro de verdade é frase CURTA e direta — exige também
-// no máximo 6 palavras pra não confundir objeção com pedido de sair da lista.
-function pediuParaParar(texto: string): boolean {
-  if (!PEDIU_PARA_PARAR.test(texto.trim())) return false;
-  const palavras = texto.trim().split(/\s+/).filter(Boolean);
-  return palavras.length <= 6;
 }
 
 export async function POST(req: Request) {

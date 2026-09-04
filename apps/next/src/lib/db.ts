@@ -18,6 +18,7 @@ export interface Store {
   listPackages(): Promise<ServicePackage[]>;
   getPackage(code: string): Promise<ServicePackage | undefined>;
   upsertPackage(pkg: ServicePackage): Promise<ServicePackage>;
+  resetPackages(pacotes: ServicePackage[]): Promise<void>;
   listProposals(): Promise<Proposal[]>;
   getProposal(id: string): Promise<Proposal | undefined>;
   upsertProposal(p: Proposal): Promise<Proposal>;
@@ -46,6 +47,7 @@ export const isBlocked = (...keys: (string | undefined)[]) => store.isBlocked(..
 export const listPackages = () => store.listPackages();
 export const getPackage = (code: string) => store.getPackage(code);
 export const upsertPackage = (pkg: ServicePackage) => store.upsertPackage(pkg);
+export const resetPackages = (pacotes: ServicePackage[]) => store.resetPackages(pacotes);
 export const listProposals = () => store.listProposals();
 export const getProposal = (id: string) => store.getProposal(id);
 export const upsertProposal = (p: Proposal) => store.upsertProposal(p);

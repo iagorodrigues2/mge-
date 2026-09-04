@@ -65,9 +65,9 @@ async function callGemini(
   opts: { json?: boolean; maxTokens?: number; cacheSystem?: boolean },
 ): Promise<LlmResult> {
   const key = process.env.GEMINI_API_KEY!;
-  // gemini-2.0-flash foi desligado pela Google em 01/06/2026 — troque via
-  // GEMINI_MODEL antes de usar este backend (ex.: gemini-3.1-flash-lite).
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  // gemini-2.0-flash (default antigo) foi desligado pela Google em
+  // 01/06/2026 — 2.5-flash é o Flash gratuito estável no momento.
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
