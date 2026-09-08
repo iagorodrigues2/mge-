@@ -163,6 +163,10 @@ function percentuaisCitados(reply: string): number[] {
   return out;
 }
 
+// O lead está mesmo perguntando preço/investimento/planos? (não é a mesma
+// coisa que "quero mais informações").
+const PEDIU_PRECO = /(quanto custa|qual (o |é o )?(valor|pre[çc]o|investimento)|pre[çc]o|or[çc]amento|quanto (fica|sai|custa|é)|t[áa] caro|est[áa] caro|quanto voc[êe]s cobram|(programas?|planos?) e pre[çc]os?|quais s[ãa]o os (programas?|planos?|formatos?))/i;
+
 const TOLERANCIA = 0.05;
 function derivados(base: number[]): number[] {
   const out = new Set<number>();
@@ -243,6 +247,21 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   const pctCatalogo = new Set(ctx.pacotes.map((p) => p.percentualFOB).filter((n): n is number => !!n));
   for (const p of percentuaisCitados(reply)) {
     if (!pctLead.has(p) && !pctCatalogo.has(p)) { v.push(`§14: percentual ${p}% não veio do lead nem do catálogo`); bloqueia = true; }
+  }
+
+  // Preço só quando pedido de verdade: response-first (V3 §3) não é licença
+  // pra jogar valor de cara em pedido genérico ("gostaria de mais
+  // informações"). Achado em produção: primeira mensagem do lead foi só
+  // isso, e a IA respondeu de cara com um investimento de referência — nem
+  // era o preço certo. Só libera citar R$ se o LEAD, em algum ponto da
+  // conversa (agora ou antes), tiver perguntado por valor/investimento/
+  // planos — ver mesmo padrão do script "quais são os programas e preços".
+  if (valoresCitados(reply).length > 0) {
+    const leadPediuPreco = [...ctx.historico.filter((m) => m.role === "lead").map((m) => m.text), ctx.incoming].some((t) => PEDIU_PRECO.test(t));
+    if (!leadPediuPreco) {
+      v.push("preço-não-pedido: citou valor sem o lead ter perguntado preço/investimento/planos — explique o posicionamento e pergunte antes de falar em número");
+      bloqueia = true;
+    }
   }
 
   // §6 — preço do Premium é sob consulta; nunca revelar um número pra ele.
