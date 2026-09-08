@@ -3,7 +3,7 @@
 // os tipos do app; a interface é idêntica ao backend JSON, então o resto do
 // código não muda. Funciona com Neon, Supabase, Vercel Postgres ou Postgres puro.
 import postgres from "postgres";
-import type { Db, Lead, ServicePackage, Proposal, Deal } from "./types";
+import type { Db, Lead, ServicePackage, Proposal, Deal, ConhecimentoItem } from "./types";
 import type { Store } from "./db";
 import { DEFAULT_PACKAGES } from "./pricing-defaults";
 
@@ -36,6 +36,7 @@ async function ensure(): Promise<ReturnType<typeof postgres>> {
       await sql`create table if not exists mge_deals     (id text primary key, data jsonb not null)`;
       await sql`create table if not exists mge_opt_out   (key text primary key)`;
       await sql`create table if not exists mge_blocklist (key text primary key)`;
+      await sql`create table if not exists mge_conhecimento (id text primary key, data jsonb not null)`;
       const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from mge_packages`;
       if (count === 0) {
         for (const p of DEFAULT_PACKAGES) {
@@ -57,13 +58,14 @@ const byCreatedDesc = (a: { createdAt: string }, b: { createdAt: string }) => b.
 export const pgStore: Store = {
   async getDb(): Promise<Db> {
     const sql = await ensure();
-    const [leads, packages, proposals, deals, optOut, blocklist] = await Promise.all([
+    const [leads, packages, proposals, deals, optOut, blocklist, conhecimento] = await Promise.all([
       sql<{ data: Lead }[]>`select data from mge_leads`,
       sql<{ data: ServicePackage }[]>`select data from mge_packages`,
       sql<{ data: Proposal }[]>`select data from mge_proposals`,
       sql<{ data: Deal }[]>`select data from mge_deals`,
       sql<{ key: string }[]>`select key from mge_opt_out`,
       sql<{ key: string }[]>`select key from mge_blocklist`,
+      sql<{ data: ConhecimentoItem }[]>`select data from mge_conhecimento`,
     ]);
     return {
       leads: leads.map((r) => r.data),
@@ -72,6 +74,7 @@ export const pgStore: Store = {
       deals: deals.map((r) => r.data),
       optOut: optOut.map((r) => r.key),
       blocklist: blocklist.map((r) => r.key),
+      conhecimento: conhecimento.map((r) => r.data),
     };
   },
 
@@ -205,5 +208,17 @@ export const pgStore: Store = {
     const sql = await ensure();
     const rows = await sql`delete from mge_leads where id = ${id} returning id`;
     return rows.length;
+  },
+
+  async listConhecimento() {
+    const sql = await ensure();
+    const rows = await sql<{ data: ConhecimentoItem }[]>`select data from mge_conhecimento`;
+    return rows.map((r) => r.data);
+  },
+
+  async addConhecimento(item) {
+    const sql = await ensure();
+    await sql`insert into mge_conhecimento (id, data) values (${item.id}, ${sql.json(item as never)})`;
+    return item;
   },
 };

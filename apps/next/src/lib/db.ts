@@ -2,7 +2,7 @@
 //   • Postgres (db-pg.ts)  — quando DATABASE_URL/POSTGRES_URL existe (Vercel).
 //   • JSON em arquivo (db-json.ts) — dev local, sem banco.
 // O resto do app importa só daqui e nunca sabe qual backend está ativo.
-import type { Db, Lead, ServicePackage, Proposal, Deal } from "./types";
+import type { Db, Lead, ServicePackage, Proposal, Deal, ConhecimentoItem } from "./types";
 import { jsonStore } from "./db-json";
 import { pgStore } from "./db-pg";
 
@@ -27,6 +27,8 @@ export interface Store {
   upsertDeal(d: Deal): Promise<Deal>;
   deleteLeadsBySource(source: string): Promise<number>;
   deleteLeadById(id: string): Promise<number>;
+  listConhecimento(): Promise<ConhecimentoItem[]>;
+  addConhecimento(item: ConhecimentoItem): Promise<ConhecimentoItem>;
 }
 
 const usePg = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
@@ -56,3 +58,5 @@ export const getDeal = (id: string) => store.getDeal(id);
 export const upsertDeal = (d: Deal) => store.upsertDeal(d);
 export const deleteLeadsBySource = (source: string) => store.deleteLeadsBySource(source);
 export const deleteLeadById = (id: string) => store.deleteLeadById(id);
+export const listConhecimento = () => store.listConhecimento();
+export const addConhecimento = (item: ConhecimentoItem) => store.addConhecimento(item);

@@ -9,7 +9,7 @@ import { DEFAULT_PACKAGES } from "./pricing-defaults";
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "mge.json");
 
-const EMPTY: Db = { leads: [], blocklist: [], optOut: [], packages: [], proposals: [], deals: [] };
+const EMPTY: Db = { leads: [], blocklist: [], optOut: [], packages: [], proposals: [], deals: [], conhecimento: [] };
 
 let cache: Db | null = null;
 let writeChain: Promise<void> = Promise.resolve();
@@ -170,5 +170,17 @@ export const jsonStore: Store = {
     db.leads = db.leads.filter((l) => l.id !== id);
     await persist();
     return before - db.leads.length;
+  },
+
+  async listConhecimento() {
+    const db = await ensure();
+    return db.conhecimento ?? [];
+  },
+
+  async addConhecimento(item) {
+    const db = await ensure();
+    db.conhecimento = [...(db.conhecimento ?? []), item];
+    await persist();
+    return item;
   },
 };

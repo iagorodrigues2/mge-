@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { addOptOut, listLeads, upsertLead } from "@/lib/db";
-import { applySdrTurn, notificarPorteiro, sdrRespond } from "@/lib/ai-sdr";
+import { applySdrTurn, notificarPorteiro, responderPendenciaIago, sdrRespond } from "@/lib/ai-sdr";
 import { pediuParaParar } from "@/lib/sdr-guards";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { normalizarRemetenteBR } from "@/lib/whatsapp-finder";
@@ -78,6 +78,25 @@ function acharLead(leads: Lead[], from: string): Lead | undefined {
   });
 }
 
+// O remetente é o número PESSOAL do Iago (não um lead)?
+function souIago(from: string): boolean {
+  const iago = so(process.env.IAGO_WHATSAPP);
+  if (!iago) return false;
+  const f = so(from);
+  return f === iago || f.slice(-8) === iago.slice(-8);
+}
+
+// Entre os leads com uma pergunta pendente pro Iago, qual ele provavelmente
+// está respondendo agora? Não dá pra saber com certeza por WhatsApp puro
+// (sem referenciar o lead) — assume a pendência mais recente. Quando há mais
+// de uma em aberto ao mesmo tempo, o formulário em /leads/[id] é o jeito
+// preciso de escolher qual.
+function pendenciaMaisRecente(leads: Lead[]): Lead | undefined {
+  return leads
+    .filter((l) => l.sdr?.perguntaPendenteIago)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
 export async function POST(req: Request) {
   const raw = await req.text();
   if (!assinaturaValida(raw, req.headers.get("x-hub-signature-256"))) {
@@ -110,6 +129,20 @@ export async function POST(req: Request) {
 
         try {
           const leads = await listLeads();
+
+          // Mensagem do PRÓPRIO Iago, com alguma pendência em aberto = ele
+          // está respondendo, não testando como lead. Se não houver
+          // pendência, cai pro fluxo normal (é assim que ele testa a IA).
+          if (souIago(from)) {
+            const pendente = pendenciaMaisRecente(leads);
+            if (pendente) {
+              const r = await responderPendenciaIago(pendente, texto);
+              await upsertLead(pendente);
+              processadas.push({ de: from, acao: "resposta_iago_repassada", erro: r.error });
+              continue;
+            }
+          }
+
           let lead = acharLead(leads, from);
 
           // Número desconhecido = inbound puro. Vira lead na hora: perder isso

@@ -12,7 +12,7 @@
 //
 // O Iago só entra no fechamento — a IA cuida do resto.
 import { llmChat, activeLlm, type LlmMessage, type LlmSystem } from "./llm";
-import { listPackages } from "./db";
+import { listPackages, listConhecimento, addConhecimento } from "./db";
 import { condicaoPagamento } from "./pricing";
 import type {
   ConversationMsg, Lead, NivelLead, SdrAction, SdrState, ServicePackage,
@@ -23,6 +23,7 @@ import {
   type FatosDoLead, pediuParaParar, respostaDeSeguranca,
 } from "./sdr-guards";
 import { avisarIago, type AvisoResult, type MotivoPorteiro } from "./porteiro";
+import { sendWhatsApp, type WhatsResult } from "./whatsapp";
 
 const AGENDA_URL = process.env.AGENDA_URL || ""; // link de agendamento do Iago, se houver
 
@@ -262,9 +263,24 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
 REGRAS DO "oferta_sugerida": só use um code que apareça no CATÁLOGO OFICIAL. Pode mudar de turno pra turno — o produto é consequência do que o lead conta, nunca um compromisso fixo.
 REGRAS DO "action": "handoff_fechamento" = quer fechar/assinar agora, pede proposta formal ou quer negociar condição. "agendar" = topou uma conversa com o Iago. "sem_fit" = VOCÊ concluiu que nenhum programa resolve o caso dele (resposta legítima e valorizada). "nao_interessado" = o lead recusou avançar, mas NÃO pediu pra parar de receber mensagem. "opt_out" = pediu explicitamente pra não receber mais contato — nunca confunda "não quero call agora" com isso. "continuar" = qualquer outro caso.`;
 
+// Respostas reais que o Iago já deu quando a IA não sabia (ver
+// responderPendenciaIago) — permanentes, valem pra QUALQUER lead futuro. Sem
+// isso, a mesma pergunta (prazo, forma de pagamento…) ficaria pendente pro
+// Iago de novo toda vez que outro lead perguntasse a mesma coisa.
+async function conhecimentoTexto(): Promise<string> {
+  const itens = await listConhecimento();
+  if (!itens.length) return "";
+  const recentes = itens.slice(-30); // limite pra não inflar o prompt indefinidamente
+  return (
+    `CONHECIMENTO CONFIRMADO PELO IAGO (respostas reais dadas em conversas anteriores — use como fato, sem precisar confirmar de novo):\n` +
+    recentes.map((i) => `- P: ${i.pergunta}\n  R: ${i.resposta}`).join("\n")
+  );
+}
+
 async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePackage[]): Promise<string> {
   const empresa = lead.nome_fantasia || lead.empresa;
   const nicho = lead.segmento || lead.canal_ou_categoria || "o segmento da empresa";
+  const conhecimento = await conhecimentoTexto();
 
   return [
     IDENTIDADE,
@@ -275,6 +291,7 @@ async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePa
     OBJECOES,
     PROTECAO,
     blocoContexto(state, pacotes),
+    ...(conhecimento ? [conhecimento] : []),
     FORMATO,
   ].join("\n\n---\n\n");
 }
@@ -533,4 +550,43 @@ export async function notificarPorteiro(lead: Lead, turn: SdrTurn): Promise<Avis
   // só marca como avisado se realmente saiu — senão tentamos de novo no próximo turno
   if (r.status === "enviado") lead.porteiro_avisos = [...jaAvisados, chave];
   return r;
+}
+
+// O Iago respondeu uma pendência (pelo formulário em /leads/[id] ou pelo
+// próprio WhatsApp dele). Isto: (1) reformula a resposta no tom do agente —
+// não manda o texto cru do Iago pro lead, isso pareceria um bilhete colado;
+// (2) manda pro lead; (3) grava na conversa; (4) some da lista de
+// pendências; (5) vira CONHECIMENTO PERMANENTE — a próxima vez que QUALQUER
+// lead perguntar algo parecido, a IA já sabe, sem precisar escalar de novo.
+export async function responderPendenciaIago(
+  lead: Lead,
+  respostaIago: string,
+): Promise<{ ok: boolean; reply: string; envio: WhatsResult; error?: string }> {
+  const pergunta = lead.sdr?.perguntaPendenteIago;
+  const destino = lead.whatsapp || lead.telefone;
+  if (!destino) return { ok: false, reply: "", envio: { status: "bloqueado", detail: "sem WhatsApp" }, error: "lead sem WhatsApp/telefone cadastrado" };
+
+  const sistema = `${IDENTIDADE}\n\n---\n\nO lead perguntou (por você, o assistente comercial): "${pergunta ?? "(pergunta não registrada)"}"\nVocê disse que ia confirmar isso com o Iago e voltar com uma posição.\n\nO IAGO RESPONDEU — matéria-prima real, não invente nada além disto: "${respostaIago}"\n\nEscreva a mensagem que você manda AGORA pro lead, no seu tom normal, comunicando isso como continuação natural da conversa (não como um comunicado formal, não repita "o Iago me respondeu que"). Responda em TEXTO SIMPLES, sem JSON, só a mensagem.`;
+
+  const r = await llmChat(sistema, [{ role: "user", content: "(gerar a mensagem de retorno pro lead)" }], { maxTokens: 400 });
+  const reply = corrigirIdentidade(r.ok && r.text.trim() ? r.text.trim() : respostaIago);
+
+  const envio = await sendWhatsApp(destino, reply);
+
+  const now = new Date().toISOString();
+  lead.conversation = [...(lead.conversation ?? []), { role: "ia", text: reply, at: now }];
+  if (lead.sdr) delete lead.sdr.perguntaPendenteIago;
+  lead.updatedAt = now;
+
+  if (pergunta) {
+    await addConhecimento({
+      id: `conh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      pergunta,
+      resposta: respostaIago,
+      criadoEm: now,
+      origemLeadId: lead.id,
+    });
+  }
+
+  return { ok: envio.status !== "bloqueado", reply, envio };
 }

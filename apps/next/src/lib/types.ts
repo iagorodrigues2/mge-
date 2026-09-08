@@ -271,6 +271,18 @@ export interface Deal {
   updatedAt: string;
 }
 
+// Base de conhecimento — respostas reais que o Iago deu quando a IA não
+// sabia (ex.: prazo negociável?, forma de pagamento?). Fica permanente e
+// entra no prompt de QUALQUER conversa futura, pra IA parar de perguntar de
+// novo o que já foi confirmado uma vez.
+export interface ConhecimentoItem {
+  id: string;
+  pergunta: string; // a pergunta que ficou pendente
+  resposta: string; // a resposta LITERAL do Iago (matéria-prima; a IA reformula ao falar com o lead, mas nunca inventa além disto)
+  criadoEm: string; // ISO
+  origemLeadId?: string; // qual conversa gerou esta resposta
+}
+
 export interface Db {
   leads: Lead[];
   blocklist: string[]; // telefones/domínios bloqueados
@@ -278,4 +290,5 @@ export interface Db {
   packages: ServicePackage[];
   proposals: Proposal[];
   deals: Deal[];
+  conhecimento: ConhecimentoItem[];
 }
