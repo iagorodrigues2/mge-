@@ -5,6 +5,7 @@ import { dueInfo } from "@/lib/cadence";
 import PostButton from "@/components/PostButton";
 import ProposalForm from "@/components/ProposalForm";
 import EnrichForm from "@/components/EnrichForm";
+import ResponderIagoForm from "@/components/ResponderIagoForm";
 import { brl } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,15 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
       <p className="sub"><Link href="/leads">← Leads</Link></p>
       <h1>{lead.empresa}</h1>
       <p className="sub">{lead.segmento} · {[lead.cidade, lead.uf].filter(Boolean).join("/")} · origem: {lead.source}</p>
+
+      {lead.sdr?.perguntaPendenteIago && (
+        <div className="panel" style={{ border: "1px solid #d64545", marginBottom: 16 }}>
+          <h2 style={{ marginTop: 0 }}>❓ Pergunta esperando sua resposta</h2>
+          <p>{lead.sdr.perguntaPendenteIago}</p>
+          <p className="hint">A IA já disse ao lead que ia confirmar isso com você. O que você escrever abaixo vai direto pro WhatsApp dele.</p>
+          <ResponderIagoForm leadId={id} />
+        </div>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
         <div className="panel">
@@ -150,6 +160,27 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
           <EnrichForm leadId={id} initialCnpj={lead.cnpj} />
         )}
       </div>
+
+      {!!lead.conversation?.length && (
+        <>
+          <h2>Conversa com a IA Vendedor ({lead.conversation.length})</h2>
+          <div className="panel">
+            {lead.sdr && (
+              <p className="hint" style={{ marginBottom: 10 }}>
+                Nível: <b>{lead.sdr.nivel}</b>
+                {lead.sdr.ofertaSugerida && <> · Oferta apontada: <b>{lead.sdr.ofertaSugerida}</b></>}
+                {lead.sdr.score && <> · Interesse: <b>{lead.sdr.score.interesse}</b></>}
+              </p>
+            )}
+            {lead.conversation.map((c, i) => (
+              <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+                <div className="hint"><b>{c.role === "lead" ? "LEAD" : "IA"}</b> · {new Date(c.at).toLocaleString("pt-BR")}</div>
+                <div className="msg">{c.text}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <h2>Mensagens enviadas ({lead.attempts.length})</h2>
       <div className="panel">

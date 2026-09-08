@@ -13,6 +13,7 @@ function addDays(base: Date, days: number): string {
 
 // Molde de condição de pagamento textual (para a proposta).
 export function condicaoPagamento(pkg: ServicePackage): string {
+  if (pkg.condicaoPagamentoOverride) return pkg.condicaoPagamentoOverride;
   switch (pkg.parcelamento) {
     case "projeto_90":
       return "50% na assinatura, 25% em 30 dias e 25% em 60 dias.";

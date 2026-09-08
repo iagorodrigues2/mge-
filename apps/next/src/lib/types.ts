@@ -216,6 +216,7 @@ export interface ServicePackage {
   creditoPara?: string; // code de outro pacote: o valor pago aqui vira crédito lá dentro da janela
   creditoJanelaDias?: number; // ex.: 15 (Diagnóstico de Importação → Importação Completa)
   parcelamento: "projeto_90" | "anual" | "avulso"; // molde de parcelas
+  condicaoPagamentoOverride?: string; // texto exato da condição, quando o molde de `parcelamento` não descreve certo (ex.: "à vista ou em até 12x no cartão")
   ocultarPreco?: boolean; // não divulgar preço sem autorização do Iago (Premium — CLAUDE V3 §6)
   destaque?: boolean; // oferta principal
   ativo: boolean;

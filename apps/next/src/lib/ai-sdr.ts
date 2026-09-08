@@ -13,6 +13,7 @@
 // O Iago só entra no fechamento — a IA cuida do resto.
 import { llmChat, activeLlm, type LlmMessage, type LlmSystem } from "./llm";
 import { listPackages } from "./db";
+import { condicaoPagamento } from "./pricing";
 import type {
   ConversationMsg, Lead, NivelLead, SdrAction, SdrState, ServicePackage,
 } from "./types";
@@ -204,7 +205,8 @@ function catalogoTexto(pacotes: ServicePackage[]): string {
       const credito = p.creditoPara
         ? ` | REGRA DE CRÉDITO: se o lead contratar [${p.creditoPara}] em até ${p.creditoJanelaDias} dias após a apresentação deste diagnóstico, os R$ ${p.precoRef.toLocaleString("pt-BR")} pagos aqui viram crédito lá`
         : "";
-      return `- [${p.code}] ${p.nome} — R$ ${p.precoRef.toLocaleString("pt-BR")}${fob}${fundador}${prazo}${credito}\n  Indicar ${offerHint(p.code)}.`;
+      const pagamento = ` | Forma de pagamento: ${condicaoPagamento(p)}`;
+      return `- [${p.code}] ${p.nome} — R$ ${p.precoRef.toLocaleString("pt-BR")}${fob}${fundador}${prazo}${credito}${pagamento}\n  Indicar ${offerHint(p.code)}.`;
     })
     .join("\n");
 }

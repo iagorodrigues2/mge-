@@ -11,6 +11,7 @@ export const DEFAULT_PACKAGES: ServicePackage[] = [
     precoRef: 5000,
     duracaoDias: 15, // prazo de entrega da análise, não acompanhamento contínuo
     parcelamento: "avulso",
+    condicaoPagamentoOverride: "R$ 5.000 à vista, ou em até 12x de R$ 500 no cartão.",
     ativo: true,
   },
   {
@@ -21,6 +22,7 @@ export const DEFAULT_PACKAGES: ServicePackage[] = [
     creditoPara: "importacao_completa",
     creditoJanelaDias: 15, // se contratar a Completa em até 15 dias, os R$5.000 abatem
     parcelamento: "avulso",
+    condicaoPagamentoOverride: "R$ 5.000 à vista, ou em até 12x de R$ 500 no cartão.",
     ativo: true,
   },
   {
