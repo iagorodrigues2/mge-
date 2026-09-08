@@ -224,7 +224,7 @@ function blocoContexto(state: SdrState, pacotes: ServicePackage[]): string {
   }
 
   linhas.push(
-    `AUTORIZAÇÃO — REGRAS INTERNAS DE PRODUTO (não negociar sozinho): você NUNCA altera preço, prazo, número de reuniões, crédito, percentual FOB, escopo, parcelamento, bônus ou desconto por conta própria. Informa o valor de referência e a condição padrão; qualquer exceção o Iago avalia depois.`,
+    `AUTORIZAÇÃO — REGRAS INTERNAS DE PRODUTO (não negociar sozinho): você NUNCA altera preço, prazo, número de reuniões, crédito, percentual FOB, escopo, parcelamento, bônus ou desconto por conta própria. Informa o valor de referência e a condição padrão; qualquer exceção o Iago avalia depois. Quando você disser "vou verificar/confirmar com o Iago e te retorno", isso dispara uma notificação de verdade pra ele — marque "precisa_resposta_iago" e "pergunta_iago" no JSON. Só prometa retorno se você realmente marcou esses campos, senão a promessa fica sem ninguém sabendo.`,
   );
 
   if (state.reuniaoImediata) {
@@ -251,6 +251,8 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
   "interesse_motivo": "1 frase: por que este nível",
   "riscos": ["sinais de cliente/negócio problemático, se houver"],
   "reuniao_imediata": true se o lead pediu pra falar AGORA/hoje/em minutos,
+  "precisa_resposta_iago": true se NESTA mensagem você disse ao lead que ia confirmar/verificar algo com o Iago e prometeu retornar (ex.: negociar prazo, escopo ou condição fora do padrão — ver bloco de AUTORIZAÇÃO),
+  "pergunta_iago": "se precisa_resposta_iago=true, a pergunta EXATA que o Iago precisa responder, em 1 frase",
   "action": "continuar|agendar|handoff_fechamento|sem_fit|nao_interessado|opt_out",
   "motivo": "1-2 frases pro Iago explicando a decisão"
 }
@@ -294,6 +296,8 @@ interface ParsedTurn {
   interesseMotivo?: string;
   riscos: string[];
   reuniaoImediata?: boolean;
+  precisaRespostaIago?: boolean;
+  perguntaIago?: string;
 }
 
 function parseTurn(raw: string): ParsedTurn {
@@ -318,6 +322,8 @@ function parseTurn(raw: string): ParsedTurn {
       interesseMotivo: o.interesse_motivo ? String(o.interesse_motivo) : undefined,
       riscos: Array.isArray(o.riscos) ? (o.riscos as unknown[]).map(String).filter(Boolean) : [],
       reuniaoImediata: o.reuniao_imediata === true,
+      precisaRespostaIago: o.precisa_resposta_iago === true,
+      perguntaIago: o.pergunta_iago ? String(o.pergunta_iago) : undefined,
     };
   } catch {
     return vazio;
@@ -430,6 +436,8 @@ function aplicarEstado(state: SdrState, p: ParsedTurn, pacotes: ServicePackage[]
     state.prioridadeAgenda = "alta";
   }
 
+  if (p.precisaRespostaIago && p.perguntaIago) state.perguntaPendenteIago = p.perguntaIago;
+
   state.updatedAt = new Date().toISOString();
   return state;
 }
@@ -501,19 +509,26 @@ export async function notificarPorteiro(lead: Lead, turn: SdrTurn): Promise<Avis
   const state = turn.state ?? lead.sdr;
   if (!state) return null;
 
-  // Prioridade: quem quer falar AGORA vem antes de quem só quer fechar.
+  // Prioridade: quem quer falar AGORA vem antes de quem só quer fechar, que
+  // vem antes de uma dúvida pontual que a IA prometeu levar ao Iago.
   const motivo: MotivoPorteiro | null =
     state.reuniaoImediata ? "reuniao_imediata"
     : turn.action === "handoff_fechamento" ? "handoff_fechamento"
     : turn.action === "agendar" ? "agendar"
+    : state.perguntaPendenteIago ? "duvida_lead"
     : null;
   if (!motivo) return null;
 
+  // "duvida_lead" pode acontecer várias vezes na MESMA conversa com perguntas
+  // DIFERENTES — rastreia por pergunta, não só pelo motivo, senão só a
+  // primeira dúvida da conversa inteira geraria aviso.
+  const chave = motivo === "duvida_lead" ? `duvida_lead:${state.perguntaPendenteIago!.slice(0, 80)}` : motivo;
+
   const jaAvisados = lead.porteiro_avisos ?? [];
-  if (jaAvisados.includes(motivo)) return null; // não encher a caixa do Iago
+  if (jaAvisados.includes(chave)) return null; // não encher a caixa do Iago
 
   const r = await avisarIago(lead, state, motivo);
   // só marca como avisado se realmente saiu — senão tentamos de novo no próximo turno
-  if (r.status === "enviado") lead.porteiro_avisos = [...jaAvisados, motivo];
+  if (r.status === "enviado") lead.porteiro_avisos = [...jaAvisados, chave];
   return r;
 }

@@ -10,6 +10,7 @@
 // histórico da conversa em vez de um formulário preenchido pela máquina.
 
 import { sendEmail } from "./email";
+import { sendWhatsApp } from "./whatsapp";
 import { listPackages } from "./db";
 import type { EmailResult } from "./email";
 import type { Lead, SdrState } from "./types";
@@ -19,12 +20,25 @@ function destinatario(): string | null {
   return process.env.IAGO_EMAIL || process.env.SMTP_USER || null;
 }
 
-export type MotivoPorteiro = "handoff_fechamento" | "agendar" | "reuniao_imediata";
+// Número pessoal do Iago (não o número de teste do bot) — se configurado, o
+// Porteiro manda um aviso curto por WhatsApp além do e-mail. Best-effort: se
+// a janela de 24h estiver fechada ou não tiver credencial, isso falha
+// silenciosamente e o e-mail continua sendo o canal confiável.
+function whatsappIago(): string | null {
+  return process.env.IAGO_WHATSAPP || null;
+}
+
+function urlBase(): string {
+  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3100";
+}
+
+export type MotivoPorteiro = "handoff_fechamento" | "agendar" | "reuniao_imediata" | "duvida_lead";
 
 const ASSUNTO: Record<MotivoPorteiro, string> = {
   handoff_fechamento: "🔥 PRONTO PRA FECHAR",
   agendar: "📅 Quer reunião",
   reuniao_imediata: "⚡ QUER FALAR AGORA",
+  duvida_lead: "❓ Lead esperando sua resposta",
 };
 
 function linha(rotulo: string, valor?: string): string {
@@ -69,6 +83,10 @@ export async function montarBriefing(lead: Lead, state: SdrState, motivo: Motivo
     ? `\n⚡ ${state.sinaisIntencao!.join("\n⚡ ")}`
     : "";
 
+  const pergunta = motivo === "duvida_lead" && state.perguntaPendenteIago
+    ? `\n❓ PERGUNTA QUE O LEAD ESTÁ AGUARDANDO:\n${state.perguntaPendenteIago}\n(a IA já disse a ele que ia confirmar isso com você e retornar — responda aqui ou direto no lead pra ela seguir a conversa)`
+    : "";
+
   const conversa = (lead.conversation ?? [])
     .slice(-10)
     .map((c) => `${c.role === "lead" ? "LEAD" : "IA  "}: ${c.text}`)
@@ -77,7 +95,7 @@ export async function montarBriefing(lead: Lead, state: SdrState, motivo: Motivo
   return `${ASSUNTO[motivo]} — ${lead.nome_fantasia || lead.empresa}
 
 POR QUE ESCALEI
-${lead.handoff_reason || state.ofertaMotivo || "(sem motivo registrado)"}${intencao}${riscos}
+${lead.handoff_reason || state.ofertaMotivo || "(sem motivo registrado)"}${intencao}${pergunta}${riscos}
 
 EMPRESA
 ${empresa}
@@ -96,12 +114,32 @@ export interface AvisoResult extends EmailResult {
   para?: string;
 }
 
+// Mensagem curta pro WhatsApp pessoal do Iago — o e-mail tem o briefing
+// completo, aqui é só o suficiente pra ele decidir se para o que está fazendo
+// e olha agora.
+function avisoWhatsApp(lead: Lead, state: SdrState, motivo: MotivoPorteiro): string {
+  const empresa = lead.nome_fantasia || lead.empresa;
+  const linkLead = `${urlBase()}/leads/${lead.id}`;
+  const corpo = motivo === "duvida_lead"
+    ? state.perguntaPendenteIago ?? ""
+    : lead.handoff_reason || state.ofertaMotivo || "";
+  return [`${ASSUNTO[motivo]} — ${empresa}`, corpo, linkLead].filter(Boolean).join("\n\n");
+}
+
 // Avisa o Iago. Nunca lança: falhar o aviso não pode derrubar a conversa.
+// E-mail é o canal confiável (define o retorno/dedup); WhatsApp é best-effort
+// além dele — pode falhar se a janela de 24h estiver fechada ou faltar
+// IAGO_WHATSAPP, e isso não deve impedir o e-mail de valer como "avisado".
 export async function avisarIago(
   lead: Lead,
   state: SdrState,
   motivo: MotivoPorteiro,
 ): Promise<AvisoResult> {
+  const numeroIago = whatsappIago();
+  if (numeroIago) {
+    sendWhatsApp(numeroIago, avisoWhatsApp(lead, state, motivo)).catch(() => {});
+  }
+
   const para = destinatario();
   if (!para) return { status: "rascunho", detail: "IAGO_EMAIL/SMTP_USER não configurado" };
   try {

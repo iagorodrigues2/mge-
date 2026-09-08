@@ -122,6 +122,10 @@ export interface SdrState {
   sinaisIntencao?: string[]; // ex.: "pediu pra falar agora"
   reuniaoImediata?: boolean; // pediu pra falar AGORA/hoje/em minutos — prioriza o Porteiro
   prioridadeAgenda?: "alta" | "normal";
+  // A IA disse ao lead que ia confirmar algo com o Iago (§13/§21 — não
+  // negociar sozinho) e prometeu retornar. Sem isso a promessa fica solta:
+  // ninguém avisa o Iago que existe uma resposta pendente.
+  perguntaPendenteIago?: string;
   updatedAt: string;
 }
 
