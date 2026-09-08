@@ -223,10 +223,16 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     if (re.test(reply)) { v.push("§24: promessa de retorno/resultado garantido"); bloqueia = true; break; }
   }
 
-  // Dinheiro: catálogo oficial, número que o lead deu, ou conta derivada dos dois.
+  // Dinheiro: catálogo oficial (valor EXATO, nunca multiplicado — preço de
+  // produto não é "conta"), número que o lead deu, ou aritmética legítima
+  // feita só com os números QUE O LEAD disse (ex.: "3 containers de R$5 mil"
+  // = R$15 mil). Juntar o catálogo no `derivados` foi um bug real: R$5.000
+  // (Diagnóstico) × 4 = R$20.000 parecia "derivado" e deixou passar um preço
+  // que não existe em produto nenhum — a IA citou R$20 mil (resquício do
+  // catálogo antigo) pra "implantação completa" e o guard não bloqueou.
   const doLead = numerosDoLead(ctx.historico, ctx.incoming);
   const doCatalogo = precosDoCatalogo(ctx.pacotes);
-  const permitidos = [...doCatalogo, ...doLead, ...derivados([...doLead, ...doCatalogo])];
+  const permitidos = [...doCatalogo, ...doLead, ...derivados(doLead)];
   for (const n of valoresCitados(reply)) {
     if (n >= 100 && !pertoDe(n, permitidos)) {
       v.push(`§14: valor R$ ${n.toLocaleString("pt-BR")} não veio do lead nem do catálogo oficial`);
