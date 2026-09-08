@@ -575,6 +575,20 @@ export async function responderPendenciaIago(
 
   const now = new Date().toISOString();
   lead.conversation = [...(lead.conversation ?? []), { role: "ia", text: reply, at: now }];
+  // Mesmo registro de auditoria que o resto do app usa pra WhatsApp — sem
+  // isso, a tela "Mensagens enviadas" do lead não mostra esta resposta nem
+  // se ela foi realmente entregue.
+  lead.attempts = [
+    ...(lead.attempts ?? []),
+    {
+      step: "resposta_pendencia_iago",
+      channel: "whatsapp",
+      message: reply,
+      status: envio.status === "enviado" ? "enviado" : "bloqueado",
+      detail: envio.detail,
+      at: now,
+    },
+  ];
   if (lead.sdr) delete lead.sdr.perguntaPendenteIago;
   lead.updatedAt = now;
 
