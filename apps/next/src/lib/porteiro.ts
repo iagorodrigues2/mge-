@@ -112,6 +112,10 @@ Máquina de Vendas — agente Porteiro`;
 
 export interface AvisoResult extends EmailResult {
   para?: string;
+  // Resultado do envio por WhatsApp — só informativo (não decide dedup/
+  // "avisado", que continua sendo o e-mail). undefined = IAGO_WHATSAPP não
+  // configurado, então nem tentou.
+  whatsapp?: { status: string; detail?: string };
 }
 
 // Mensagem curta pro WhatsApp pessoal do Iago — o e-mail tem o briefing
@@ -127,27 +131,29 @@ function avisoWhatsApp(lead: Lead, state: SdrState, motivo: MotivoPorteiro): str
 }
 
 // Avisa o Iago. Nunca lança: falhar o aviso não pode derrubar a conversa.
-// E-mail é o canal confiável (define o retorno/dedup); WhatsApp é best-effort
-// além dele — pode falhar se a janela de 24h estiver fechada ou faltar
-// IAGO_WHATSAPP, e isso não deve impedir o e-mail de valer como "avisado".
+// E-mail é o canal confiável (define o retorno/dedup — "enviado" aqui é
+// sempre o status do e-mail); WhatsApp é melhor-esforço além dele — pode
+// falhar (janela de 24h fechada, número não autorizado, IAGO_WHATSAPP
+// ausente) sem impedir o e-mail de valer como "avisado". O resultado dele
+// vem só informativo em `whatsapp`, pra dar pra diagnosticar.
 export async function avisarIago(
   lead: Lead,
   state: SdrState,
   motivo: MotivoPorteiro,
 ): Promise<AvisoResult> {
   const numeroIago = whatsappIago();
-  if (numeroIago) {
-    sendWhatsApp(numeroIago, avisoWhatsApp(lead, state, motivo)).catch(() => {});
-  }
+  const whatsapp = numeroIago
+    ? await sendWhatsApp(numeroIago, avisoWhatsApp(lead, state, motivo)).catch((e: Error) => ({ status: "bloqueado", detail: e.message }))
+    : undefined;
 
   const para = destinatario();
-  if (!para) return { status: "rascunho", detail: "IAGO_EMAIL/SMTP_USER não configurado" };
+  if (!para) return { status: "rascunho", detail: "IAGO_EMAIL/SMTP_USER não configurado", whatsapp };
   try {
     const corpo = await montarBriefing(lead, state, motivo);
     const assunto = `${ASSUNTO[motivo]} — ${lead.nome_fantasia || lead.empresa}`;
     const r = await sendEmail(para, assunto, corpo);
-    return { ...r, para };
+    return { ...r, para, whatsapp };
   } catch (e) {
-    return { status: "bloqueado", detail: (e as Error).message, para };
+    return { status: "bloqueado", detail: (e as Error).message, para, whatsapp };
   }
 }
