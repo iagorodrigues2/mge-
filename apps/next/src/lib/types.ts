@@ -112,6 +112,7 @@ export interface SdrCommercialScore {
 }
 
 export interface SdrState {
+  horariosOferecidos?: HorarioOferecido[]; // slots que a IA colocou na mesa no último turno
   origem: "inbound" | "outbound"; // muda a abertura
   nivel: NivelLead;
   ofertaSugerida?: string; // code do pacote que a conversa está apontando agora (pode mudar)
@@ -136,6 +137,25 @@ export interface OutreachAttempt {
   status: "enviado" | "rascunho" | "bloqueado" | "assistido";
   detail?: string; // link wa.me, id da mensagem, motivo do bloqueio
   at: string; // ISO
+}
+
+// Reunião de verdade na agenda do Iago (Google Calendar), marcada pela IA.
+export interface ReuniaoMarcada {
+  inicio: string; // ISO
+  fim: string; // ISO
+  eventoId: string;
+  link?: string; // htmlLink do evento
+  rotulo: string; // "terça (16/09) às 10h" — como foi dito ao lead
+  criadoEm: string; // ISO
+}
+
+// Horário livre oferecido ao lead. Fica no estado porque o lead aceita no turno
+// SEGUINTE ("pode ser terça") — sem guardar, não dá pra saber a que ele se
+// refere, e a IA acabaria inventando o horário.
+export interface HorarioOferecido {
+  inicio: string;
+  fim: string;
+  rotulo: string;
 }
 
 export interface Lead {
@@ -196,6 +216,7 @@ export interface Lead {
   handoff_at?: string; // ISO — quando escalou pro fechamento
   porteiro_avisos?: string[]; // motivos já avisados ao Iago (evita e-mail repetido)
   attempts_descartados?: OutreachAttempt[]; // tentativas que o CRM registrou mas que nunca saíram (modo assistido sem clique)
+  reuniao?: ReuniaoMarcada; // call criada na agenda do Iago pelo agente Agenda
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;

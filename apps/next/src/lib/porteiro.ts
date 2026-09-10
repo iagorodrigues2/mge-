@@ -83,6 +83,12 @@ export async function montarBriefing(lead: Lead, state: SdrState, motivo: Motivo
     ? `\n⚡ ${state.sinaisIntencao!.join("\n⚡ ")}`
     : "";
 
+  // Se a IA já marcou a call no Google Calendar, o Iago precisa ver a hora
+  // no topo do briefing — é a informação que ele age em cima.
+  const reuniao = lead.reuniao
+    ? `\n📅 REUNIÃO JÁ MARCADA NA SUA AGENDA: ${lead.reuniao.rotulo}${lead.reuniao.link ? `\n${lead.reuniao.link}` : ""}`
+    : "";
+
   const pergunta = motivo === "duvida_lead" && state.perguntaPendenteIago
     ? `\n❓ PERGUNTA QUE O LEAD ESTÁ AGUARDANDO:\n${state.perguntaPendenteIago}\n(a IA já disse a ele que ia confirmar isso com você e retornar — responda aqui ou direto no lead pra ela seguir a conversa)`
     : "";
@@ -95,7 +101,7 @@ export async function montarBriefing(lead: Lead, state: SdrState, motivo: Motivo
   return `${ASSUNTO[motivo]} — ${lead.nome_fantasia || lead.empresa}
 
 POR QUE ESCALEI
-${lead.handoff_reason || state.ofertaMotivo || "(sem motivo registrado)"}${intencao}${pergunta}${riscos}
+${lead.handoff_reason || state.ofertaMotivo || "(sem motivo registrado)"}${reuniao}${intencao}${pergunta}${riscos}
 
 EMPRESA
 ${empresa}

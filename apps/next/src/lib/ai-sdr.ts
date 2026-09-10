@@ -15,9 +15,10 @@ import { llmChat, activeLlm, type LlmMessage, type LlmSystem } from "./llm";
 import { listPackages, listConhecimento, addConhecimento } from "./db";
 import { condicaoPagamento } from "./pricing";
 import type {
-  ConversationMsg, Lead, NivelLead, SdrAction, SdrState, ServicePackage,
+  ConversationMsg, Lead, NivelLead, ReuniaoMarcada, SdrAction, SdrState, ServicePackage,
 } from "./types";
 import { resumoEstado, stateOf, validarOferta } from "./sdr-state";
+import { agendaConfigurada, criarReuniao, horarioDisponivel, proximosHorarios, type Horario } from "./google-calendar";
 import {
   AGENDA_INTEGRADA, checarResposta, contaPerguntas, corrigirIdentidade,
   type FatosDoLead, pediuParaParar, respostaDeSeguranca,
@@ -33,6 +34,7 @@ export interface SdrTurn {
   action: SdrAction; // o que fazer a seguir
   motivo?: string; // por que decidiu isso (para o handoff/log)
   state?: SdrState; // estado do Vendedor depois deste turno
+  reuniao?: ReuniaoMarcada; // call criada no Google Calendar neste turno
   violacoes?: string[]; // regras do CLAUDE V3 que a saída bruta feriu
   error?: string;
   backend?: string;
@@ -214,7 +216,7 @@ function catalogoTexto(pacotes: ServicePackage[]): string {
     .join("\n");
 }
 
-function blocoContexto(state: SdrState, pacotes: ServicePackage[]): string {
+function blocoContexto(state: SdrState, pacotes: ServicePackage[], horarios?: Horario[]): string {
   const linhas: string[] = [resumoEstado(state, pacotes)];
 
   linhas.push(
@@ -236,11 +238,22 @@ function blocoContexto(state: SdrState, pacotes: ServicePackage[]): string {
     linhas.push(`⚡ O LEAD PEDIU PRA FALAR AGORA. Sinal fortíssimo de intenção — trate com prioridade máxima, nada de burocracia.`);
   }
 
-  linhas.push(
-    AGENDA_INTEGRADA
-      ? `AGENDA (integração ATIVA): você tem acesso à disponibilidade. É PROIBIDO responder "vou verificar e te retorno" — consulte agora e responda concreto.${AGENDA_URL ? ` Link de agendamento: ${AGENDA_URL}.` : ""} Nunca invente horário que a agenda não confirmou.`
-      : `AGENDA: a integração ainda NÃO está ativa. Diga que vai confirmar a disponibilidade com o Iago e retorna com os horários — seja rápido e específico no compromisso ("te confirmo ainda hoje"). Nunca invente nem confirme horário por conta própria.`,
-  );
+  // Os horários vêm do Google Calendar do Iago no momento da chamada. Entram no
+  // prompt com o ISO exato porque é o ISO que o modelo devolve em
+  // "horario_escolhido" — e só um ISO desta lista cria evento de verdade.
+  if (horarios?.length) {
+    linhas.push(
+      `AGENDA (integração ATIVA — disponibilidade REAL do Iago agora):\n${horarios
+        .map((h) => `- ${h.rotulo}  [id: ${h.inicio}]`)
+        .join("\n")}\n\nCOMO USAR: ofereça no máximo DOIS desses horários por mensagem, escritos como estão no rótulo. É PROIBIDO responder "vou verificar e te retorno" e é PROIBIDO oferecer horário que não esteja nesta lista. Quando o lead aceitar um horário, coloque o id EXATO dele em "horario_escolhido" e confirme na mensagem como algo já marcado — o evento entra na agenda do Iago automaticamente. Se o lead pedir um horário que não está na lista, diga que nesse você não tem espaço e ofereça o mais próximo daqui.`,
+    );
+  } else {
+    linhas.push(
+      AGENDA_INTEGRADA && !agendaConfigurada()
+        ? `AGENDA (integração ATIVA): você tem acesso à disponibilidade.${AGENDA_URL ? ` Link de agendamento: ${AGENDA_URL}.` : ""} Nunca invente horário que a agenda não confirmou.`
+        : `AGENDA: a integração ainda NÃO está ativa. Diga que vai confirmar a disponibilidade com o Iago e retorna com os horários — seja rápido e específico no compromisso ("te confirmo ainda hoje"). Nunca invente nem confirme horário por conta própria.`,
+    );
+  }
 
   return linhas.join("\n\n");
 }
@@ -258,6 +271,7 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
   "reuniao_imediata": true se o lead pediu pra falar AGORA/hoje/em minutos,
   "precisa_resposta_iago": true se NESTA mensagem você disse ao lead que ia confirmar/verificar algo com o Iago e prometeu retornar (ex.: negociar prazo, escopo ou condição fora do padrão — ver bloco de AUTORIZAÇÃO),
   "pergunta_iago": "se precisa_resposta_iago=true, a pergunta EXATA que o Iago precisa responder, em 1 frase",
+  "horario_escolhido": "o id EXATO (ISO) do horário da lista de AGENDA que o lead aceitou nesta mensagem, ou null se nenhum foi aceito agora",
   "action": "continuar|agendar|handoff_fechamento|sem_fit|nao_interessado|opt_out",
   "motivo": "1-2 frases pro Iago explicando a decisão"
 }
@@ -279,7 +293,7 @@ async function conhecimentoTexto(): Promise<string> {
   );
 }
 
-async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePackage[]): Promise<string> {
+async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePackage[], horarios?: Horario[]): Promise<string> {
   const empresa = lead.nome_fantasia || lead.empresa;
   const nicho = lead.segmento || lead.canal_ou_categoria || "o segmento da empresa";
   const conhecimento = await conhecimentoTexto();
@@ -292,7 +306,7 @@ async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePa
     CONVERSA,
     OBJECOES,
     PROTECAO,
-    blocoContexto(state, pacotes),
+    blocoContexto(state, pacotes, horarios),
     ...(conhecimento ? [conhecimento] : []),
     FORMATO,
   ].join("\n\n---\n\n");
@@ -319,6 +333,7 @@ interface ParsedTurn {
   reuniaoImediata?: boolean;
   precisaRespostaIago?: boolean;
   perguntaIago?: string;
+  horarioEscolhido?: string | null;
 }
 
 function parseTurn(raw: string): ParsedTurn {
@@ -345,6 +360,7 @@ function parseTurn(raw: string): ParsedTurn {
       reuniaoImediata: o.reuniao_imediata === true,
       precisaRespostaIago: o.precisa_resposta_iago === true,
       perguntaIago: o.pergunta_iago ? String(o.pergunta_iago) : undefined,
+      horarioEscolhido: o.horario_escolhido ? String(o.horario_escolhido) : null,
     };
   } catch {
     return vazio;
@@ -371,7 +387,20 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   if (history.length > 0) history[history.length - 1].cache = true;
   history.push({ role: "user", content: incoming });
 
-  const base = await buildSystemPrompt(lead, state, pacotes);
+  // Disponibilidade REAL, consultada no momento da resposta. Falha do Google
+  // nunca pode derrubar a conversa: sem horários, o prompt volta ao texto de
+  // "agenda não integrada" e a IA promete retorno em vez de inventar hora.
+  let horarios: Horario[] = [];
+  if (agendaConfigurada()) {
+    try {
+      const r = await proximosHorarios(3);
+      if (r.ok) horarios = r.horarios;
+    } catch {
+      horarios = [];
+    }
+  }
+
+  const base = await buildSystemPrompt(lead, state, pacotes, horarios);
 
   // Chama; se a saída ferir regra bloqueante, corrige o prompt e chama de novo (1x).
   let parsed: ParsedTurn | null = null;
@@ -399,6 +428,7 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
       primeiraMensagem: historico.filter((h) => h.role === "ia").length === 0,
       pacotes,
       fatos: fatosDoLead(lead),
+      agendaAtiva: horarios.length > 0,
     });
     parsed = p;
     violacoes = g.violacoes;
@@ -423,17 +453,77 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   }
 
   const novoEstado = aplicarEstado(state, parsed, pacotes);
-  const acaoFinal = ajustarAcao(parsed.action, incoming);
+  let acaoFinal = ajustarAcao(parsed.action, incoming);
+
+  // AGENDAMENTO DE VERDADE. O lead aceita o horário no turno SEGUINTE ao da
+  // oferta, então vale tanto a lista de agora quanto a que ficou guardada no
+  // estado — mas SÓ essas: um ISO que nunca foi oferecido é horário inventado.
+  let reuniao: ReuniaoMarcada | undefined;
+  let falhaAgendamento: string | undefined;
+  const escolhido = parsed.horarioEscolhido;
+  if (escolhido && agendaConfigurada()) {
+    const ofertados = [...horarios, ...(state.horariosOferecidos ?? [])];
+    const valido = ofertados.some((h) => h.inicio === escolhido);
+    if (!valido) {
+      falhaAgendamento = "a IA devolveu um horário que não estava na lista oferecida";
+    } else if (!(await horarioDisponivel(escolhido))) {
+      // Slot oferecido há dois dias pode ter sido ocupado nesse meio-tempo.
+      falhaAgendamento = "o horário aceito já não está livre na agenda";
+    } else {
+      const r = await criarReuniao({
+        inicioISO: escolhido,
+        titulo: `Diagnóstico — ${lead.nome_fantasia || lead.empresa}`,
+        descricao: descricaoReuniao(lead, novoEstado),
+      });
+      if (r.ok) {
+        reuniao = { ...r.reuniao, criadoEm: new Date().toISOString() };
+        novoEstado.horariosOferecidos = undefined; // marcou: a lista morreu aqui
+      } else {
+        falhaAgendamento = r.error;
+      }
+    }
+  }
+
+  // Prometer horário que não entrou na agenda é pior do que não prometer. Se a
+  // criação falhou, a mensagem vira compromisso de confirmação e o Iago é
+  // avisado do mesmo jeito (action continua "agendar" — o lead QUER a call).
+  if (falhaAgendamento) {
+    parsed.reply = "Perfeito. Vou confirmar esse horário na agenda do Iago e já te retorno com a confirmação.";
+    acaoFinal = "agendar";
+  } else if (!reuniao && horarios.length) {
+    // Ofereceu (ou pode ter oferecido) horários: guarda pro turno seguinte.
+    novoEstado.horariosOferecidos = horarios;
+  }
 
   return {
     ok: true,
     reply: parsed.reply,
     action: acaoFinal,
-    motivo: montarMotivo(parsed, novoEstado, acaoFinal),
+    motivo: montarMotivo(parsed, novoEstado, acaoFinal) + (reuniao ? ` | 📅 reunião criada: ${reuniao.rotulo}` : falhaAgendamento ? ` | ⚠ agendamento falhou: ${falhaAgendamento}` : ""),
     state: novoEstado,
+    reuniao,
     violacoes: violacoes.length ? violacoes : undefined,
     backend,
   };
+}
+
+// O que o Iago vê no evento do Google Calendar. Sem isso ele abre a agenda e
+// encontra "Diagnóstico — Probel" sem saber com quem vai falar nem sobre o quê.
+function descricaoReuniao(lead: Lead, state: SdrState): string {
+  const linhas = [
+    `Lead: ${lead.empresa}`,
+    lead.contato_nome ? `Contato: ${lead.contato_nome}` : "",
+    lead.whatsapp ? `WhatsApp: ${lead.whatsapp}` : "",
+    lead.segmento ? `Segmento: ${lead.segmento}` : "",
+    lead.website ? `Site: ${lead.website}` : "",
+    "",
+    `Segmentação: ${state.nivel}`,
+    state.ofertaSugerida ? `Oferta que a conversa aponta: ${state.ofertaSugerida}${state.ofertaMotivo ? ` — ${state.ofertaMotivo}` : ""}` : "",
+    state.riscos?.length ? `Riscos: ${state.riscos.join("; ")}` : "",
+    "",
+    "Marcada automaticamente pelo agente Vendedor. Briefing completo chega por e-mail.",
+  ];
+  return linhas.filter(Boolean).join("\n");
 }
 
 // Atualiza o estado com o que a IA reportou neste turno.
@@ -495,7 +585,12 @@ export function applySdrTurn(lead: Lead, incoming: string, turn: SdrTurn): Lead 
 
   switch (turn.action) {
     case "agendar":
-      lead.stage = "reuniao_marcada";
+      // Com a agenda integrada, "reunião marcada" só vale se o evento entrou
+      // MESMO no calendário. Se a criação falhou, o lead quer a call mas nada
+      // está marcado — e o funil não pode dizer que está. Sem integração, o
+      // significado antigo continua: o Iago marca na mão depois do aviso.
+      if (turn.reuniao) lead.reuniao = turn.reuniao;
+      lead.stage = turn.reuniao || !agendaConfigurada() ? "reuniao_marcada" : "em_conversa";
       break;
     case "handoff_fechamento":
       lead.stage = "em_conversa";

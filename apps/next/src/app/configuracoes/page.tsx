@@ -1,5 +1,6 @@
 import { listPackages, activeBackend } from "@/lib/db";
 import { activeLlm } from "@/lib/llm";
+import { agendaConfigurada } from "@/lib/google-calendar";
 import PriceEditor from "@/components/PriceEditor";
 import TestarIaButton from "@/components/TestarIaButton";
 
@@ -26,6 +27,7 @@ export default async function ConfiguracoesPage() {
   const backend = activeBackend();
   const llm = activeLlm();
   const iaOn = llm !== "none";
+  const agendaOn = agendaConfigurada();
 
   return (
     <main>
@@ -44,6 +46,8 @@ export default async function ConfiguracoesPage() {
           hint="Defina SMTP_HOST/PORT/USER/PASS/FROM. Sem isso, o e-mail vira rascunho." />
         <Status on={iaOn} label={`Cérebro da IA (agente Vendedor)${iaOn ? ` — ${llm}` : ""}`}
           hint="Defina ANTHROPIC_API_KEY (e ANTHROPIC_MODEL) nas variáveis de ambiente. Sem isso o agente Vendedor não conversa. Presença da chave ≠ chave válida: use o teste abaixo." />
+        <Status on={agendaOn} label="Agenda (Google Calendar) — o agente marca a reunião sozinho"
+          hint="Defina GOOGLE_SA_EMAIL + GOOGLE_SA_PRIVATE_KEY + GOOGLE_CALENDAR_ID e compartilhe a agenda com a service account (docs/agenda-google-calendar.md). Sem isso, a IA promete retorno e você marca na mão. Confira em /api/agenda/testar." />
         <TestarIaButton />
         <p className="hint" style={{ marginTop: 12 }}>
           Na Vercel, variável nova só vale <b>depois do Redeploy</b> (Deployments → ⋯ → Redeploy).

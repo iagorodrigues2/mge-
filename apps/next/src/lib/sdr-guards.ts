@@ -5,6 +5,7 @@
 // opt-out) mais a hard rule anti-invenção que já existia e não conflita com
 // nada do V3.
 
+import { agendaConfigurada } from "./google-calendar";
 import type { ConversationMsg, ServicePackage } from "./types";
 
 // V3 §16: nunca dizer "Iago toca tudo" nem "a equipe toca tudo" ao se
@@ -55,7 +56,10 @@ const PROMETEU_VERIFICAR: RegExp[] = [
   /vou (verificar|checar|ver) (a )?(agenda|disponibilidade)[^.?!]{0,30}(e (te )?(retorno|aviso|falo)|depois)/i,
   /(te )?(retorno|aviso|confirmo) (depois|mais tarde|em seguida|assim que)/i,
 ];
-export const AGENDA_INTEGRADA = !!process.env.GOOGLE_CALENDAR_TOKEN || !!process.env.AGENDA_URL;
+// Com a agenda de verdade ligada (service account do Google Calendar), a IA tem
+// os horários livres na mão e prometer retorno vira erro. O AGENDA_URL antigo
+// (link de agendamento externo) continua valendo como integração.
+export const AGENDA_INTEGRADA = agendaConfigurada() || !!process.env.AGENDA_URL;
 
 // "Tudo bem?" é saudação, não pergunta de descoberta — não conta pra "uma
 // pergunta por vez" (§9 do documento antigo, mantido: senão o padrão de
@@ -116,6 +120,10 @@ export interface GuardContext {
   primeiraMensagem: boolean;
   pacotes: ServicePackage[]; // catálogo ativo — os preços "de verdade" que podem ser citados
   fatos: FatosDoLead;
+  // Houve horário REAL no prompt deste turno? A presença das variáveis de
+  // ambiente não basta: se o Google falhou, o prompt mandou a IA prometer
+  // retorno, e punir isso seria bloquear a resposta correta.
+  agendaAtiva?: boolean;
 }
 
 export interface GuardResult {
@@ -281,7 +289,7 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
-  if (AGENDA_INTEGRADA) {
+  if (ctx.agendaAtiva ?? AGENDA_INTEGRADA) {
     for (const re of PROMETEU_VERIFICAR) {
       if (re.test(reply)) {
         v.push("§23: a integração de agenda está ativa — consulte a disponibilidade AGORA e ofereça horário concreto, não prometa retorno");
