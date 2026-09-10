@@ -15,15 +15,23 @@ export const maxDuration = 60;
 // POR DIA. Agendar "0 12,18 * * 1-5" faz o deploy FALHAR — e, pior, derruba
 // todos os deploys seguintes até alguém perceber. Por isso é "0 12 * * *"
 // (09:00 BRT, diário). Só mude para várias vezes ao dia no plano Pro.
+// Esta rota fica FORA do login (a Vercel chama sem cookie), então o CRON_SECRET
+// é a única coisa que separa o disparo automático de qualquer um na internet
+// mandando follow-up em nome do Iago. Sem o segredo definido, ela não roda:
+// antes ela liberava, e isso viraria um buraco do tamanho do login que
+// acabamos de colocar. A Vercel injeta o header sozinha quando a variável
+// CRON_SECRET existe no projeto.
 function autorizado(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // não configurado: não trava o piloto
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  if (!secret) return false;
+  return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 async function executar(req: Request) {
-  if (!autorizado(req)) return NextResponse.json({ ok: false, error: "não autorizado" }, { status: 401 });
+  if (!autorizado(req)) {
+    const motivo = process.env.CRON_SECRET ? "não autorizado" : "CRON_SECRET não configurado — defina na Vercel para a cadência automática voltar a rodar";
+    return NextResponse.json({ ok: false, error: motivo }, { status: 401 });
+  }
 
   if (!isBusinessHours()) {
     return NextResponse.json({ ok: true, pulado: "fora do horário comercial", enviados: 0 });
