@@ -9,8 +9,22 @@
 // Workspace), então o convite sai pelo nosso próprio SMTP, que já é real.
 import { listLeads, upsertLead } from "./db";
 import { sendEmail } from "./email";
-import { sendWhatsApp } from "./whatsapp";
+import { sendTemplate, sendWhatsApp, whatsappConfigurado } from "./whatsapp";
+import { janelaAberta, LEMBRETE_REUNIAO } from "./wa-templates";
 import type { Lead } from "./types";
+
+// A janela de 24h de texto livre é aberta pelo LEAD. Uma call marcada para
+// daqui a três dias tem a janela FECHADA na hora de lembrar — e aí texto livre
+// é recusado pela Meta. Com a janela aberta manda texto (grátis); fechada,
+// manda o template aprovado (pago, mas chega).
+async function avisarWhats(lead: Lead, textoLivre: string) {
+  const numero = lead.whatsapp ?? lead.telefone;
+  if (!numero) return undefined;
+  if (janelaAberta(lead)) return (await sendWhatsApp(numero, textoLivre)).status;
+  if (!whatsappConfigurado()) return (await sendWhatsApp(numero, textoLivre)).status;
+  const r = await sendTemplate(numero, LEMBRETE_REUNIAO.name, LEMBRETE_REUNIAO.variaveis(lead), LEMBRETE_REUNIAO.lang);
+  return r.status;
+}
 
 function quandoTexto(lead: Lead): string {
   return lead.reuniao?.rotulo ?? "";
@@ -47,15 +61,13 @@ export async function avisarLeadDaReuniao(lead: Lead): Promise<{ email?: string;
 
   // O WhatsApp só sai se a janela de 24h estiver aberta — e ela está, porque o
   // lead acabou de conversar. Best-effort: falhar aqui não pode desmarcar nada.
-  const numero = lead.whatsapp ?? lead.telefone;
-  if (numero) {
+  if (lead.whatsapp ?? lead.telefone) {
     const texto = [
       `Confirmado! ${r.rotulo}.`,
       r.meet ? `Link da call: ${r.meet}` : "",
       "Se precisar remarcar, é só me avisar por aqui.",
     ].filter(Boolean).join("\n");
-    const wa = await sendWhatsApp(numero, texto);
-    resultado.whatsapp = wa.status;
+    resultado.whatsapp = await avisarWhats(lead, texto);
   }
 
   if (resultado.email === "enviado" || resultado.whatsapp === "enviado") {
@@ -68,49 +80,84 @@ export async function avisarLeadDaReuniao(lead: Lead): Promise<{ email?: string;
 // isto é um cron externo, e a janela larga evita que um atraso do agendador
 // faça o lembrete simplesmente não sair. `lembreteEnviado` garante que rodar
 // duas vezes não manda duas mensagens.
-const JANELA_MIN = 20;
-const JANELA_MAX = 45;
+const LEMBRETE_MIN = 20;   // minutos antes: piso da janela do lembrete
+const LEMBRETE_MAX = 45;   // teto — o cron roda de 15 em 15, cabe folga
+const VESPERA_MIN = 22 * 60; // 22h antes
+const VESPERA_MAX = 26 * 60; // 26h antes
 
+export interface LinhaAviso {
+  empresa: string;
+  quando: string;
+  tipo: "vespera" | "lembrete";
+  whatsapp?: string;
+  email?: string;
+}
+
+// Chamado pelo pinger a cada 15 minutos. Faz DOIS trabalhos:
+//
+// 1. VÉSPERA (~24h antes) — a confirmação que o Iago pediu. É ela que dá ao
+//    lead a chance de responder; e a resposta dele REABRE a janela de 24h, o
+//    que faz o lembrete seguinte sair como texto livre, de graça.
+// 2. LEMBRETE (~30 min antes) — a última chamada antes da call.
+//
+// Idempotente pelos carimbos: rodar de novo não manda de novo.
 export async function enviarLembretes(agora = new Date()): Promise<{
   enviados: number;
-  resultados: { empresa: string; quando: string; whatsapp?: string; email?: string }[];
+  resultados: LinhaAviso[];
 }> {
   const leads = await listLeads();
-  const resultados: { empresa: string; quando: string; whatsapp?: string; email?: string }[] = [];
+  const resultados: LinhaAviso[] = [];
 
   for (const lead of leads) {
     const r = lead.reuniao;
-    if (!r || r.lembreteEnviado || lead.opt_out) continue;
+    if (!r || lead.opt_out) continue;
     const faltamMin = (new Date(r.inicio).getTime() - agora.getTime()) / 60000;
-    if (faltamMin < JANELA_MIN || faltamMin > JANELA_MAX) continue;
 
-    const linha: { empresa: string; quando: string; whatsapp?: string; email?: string } = {
-      empresa: lead.empresa,
-      quando: r.rotulo,
-    };
+    const ehVespera = !r.confirmacao24hEnviada && faltamMin >= VESPERA_MIN && faltamMin <= VESPERA_MAX;
+    const ehLembrete = !r.lembreteEnviado && faltamMin >= LEMBRETE_MIN && faltamMin <= LEMBRETE_MAX;
+    if (!ehVespera && !ehLembrete) continue;
 
-    const numero = lead.whatsapp ?? lead.telefone;
-    if (numero) {
-      const texto = [
-        `Passando pra confirmar nossa conversa daqui a pouco — ${r.rotulo}.`,
-        r.meet ? `Link: ${r.meet}` : "",
-        "Consegue estar disponível?",
-      ].filter(Boolean).join("\n");
-      linha.whatsapp = (await sendWhatsApp(numero, texto)).status;
-    }
+    const tipo: "vespera" | "lembrete" = ehVespera ? "vespera" : "lembrete";
+    const linha: LinhaAviso = { empresa: lead.empresa, quando: r.rotulo, tipo };
+
+    const textoLivre = tipo === "vespera"
+      ? [
+          `Passando pra confirmar nossa conversa de amanhã — ${r.rotulo}.`,
+          r.meet ? `Link da call: ${r.meet}` : "",
+          "Continua de pé pra você?",
+        ].filter(Boolean).join("\n")
+      : [
+          `Nossa conversa é daqui a pouco — ${r.rotulo}.`,
+          r.meet ? `Link: ${r.meet}` : "",
+          "Consegue estar disponível?",
+        ].filter(Boolean).join("\n");
+
+    linha.whatsapp = await avisarWhats(lead, textoLivre);
+
     if (lead.email) {
-      const corpo = [`Lembrete: sua conversa com o Iago é ${r.rotulo}.`, "", ...linhasDaCall(lead)].join("\n");
-      linha.email = (await sendEmail(lead.email, `Lembrete — conversa ${r.rotulo}`, corpo)).status;
+      const assunto = tipo === "vespera" ? `Confirmação — conversa ${r.rotulo}` : `Lembrete — conversa ${r.rotulo}`;
+      const corpo = [
+        tipo === "vespera" ? `Sua conversa com o Iago é amanhã, ${r.rotulo}.` : `Sua conversa com o Iago é daqui a pouco, ${r.rotulo}.`,
+        "",
+        ...linhasDaCall(lead),
+      ].join("\n");
+      linha.email = (await sendEmail(lead.email, assunto, corpo)).status;
     }
 
-    // Só marca como enviado se ALGO saiu de verdade; senão o lembrete se
-    // perderia para sempre por causa de uma falha momentânea.
+    // Só carimba se ALGO saiu de verdade; senão o aviso se perderia para
+    // sempre por causa de uma falha momentânea de rede.
     if (linha.whatsapp === "enviado" || linha.email === "enviado") {
-      lead.reuniao = { ...r, lembreteEnviado: new Date().toISOString() };
+      const carimbo = new Date().toISOString();
+      lead.reuniao = tipo === "vespera"
+        ? { ...r, confirmacao24hEnviada: carimbo }
+        : { ...r, lembreteEnviado: carimbo };
       await upsertLead(lead);
     }
     resultados.push(linha);
   }
 
-  return { enviados: resultados.filter((r) => r.whatsapp === "enviado" || r.email === "enviado").length, resultados };
+  return {
+    enviados: resultados.filter((x) => x.whatsapp === "enviado" || x.email === "enviado").length,
+    resultados,
+  };
 }

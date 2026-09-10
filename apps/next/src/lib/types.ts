@@ -149,6 +149,7 @@ export interface ReuniaoMarcada {
   meet?: string; // link do Google Meet (nem sempre a service account consegue criar)
   avisoLeadEnviado?: string; // ISO — quando o lead recebeu a confirmação
   lembreteEnviado?: string; // ISO — quando saiu o lembrete de 30 min (evita repetir)
+  confirmacao24hEnviada?: string; // ISO — quando saiu a confirmação da véspera
   rotulo: string; // "terça (16/09) às 10h" — como foi dito ao lead
   criadoEm: string; // ISO
 }

@@ -118,6 +118,8 @@ Se fizer sentido, me responde e eu explico em dois minutos.
 | Janela **fechada**, etapas `followup_1` e `followup_2` | template `retomada_sem_resposta_v1` |
 | Janela **fechada**, etapa `encerramento` | **não envia nada** — encerra em silêncio (o lead vai para `nutrir`) |
 | Janela **aberta** (lead respondeu nas últimas 24h) | texto livre: o agente Vendedor assume |
+| **~24h antes da call** | `lembrete_reuniao_v1` se a janela estiver fechada; texto livre se aberta |
+| **~30 min antes da call** | idem — e se o lead respondeu a confirmação da véspera, a janela está aberta e sai de graça |
 
 Por que o `encerramento` não tem template: pagar uma mensagem para avisar que
 vamos parar de procurar só gera custo e risco de denúncia.
@@ -138,6 +140,32 @@ WABA de produção e mostra o número ligado ao `phone id`. É o teste que pega 
 erro silencioso mais caro: template criado na conta de **teste** enquanto a
 produção aponta para a WABA definitiva — no painel da Meta os dois aparecem
 "Active", mas o envio volta com "template does not exist".
+
+## Template 4 — `lembrete_reuniao_v1` (confirmação e lembrete da call)
+
+**Nome:** `lembrete_reuniao_v1`
+**Categoria:** **Utility** (não é Marketing — é a confirmação de um compromisso
+que o próprio lead agendou; Utility também é mais barato) · **Idioma:** Português (BR)
+
+**Corpo:**
+```
+Olá, {{1}}. Passando para confirmar sua conversa com o Iago Rodrigues.
+
+Quando: {{2}}
+Link da call: {{3}}
+
+Se precisar remarcar, é só responder esta mensagem.
+```
+
+**Variáveis de exemplo:**
+- `{{1}}` = `Rafael`
+- `{{2}}` = `sexta (11/09) às 10h`
+- `{{3}}` = `https://meet.google.com/qtk-hifp-rnu`
+
+> POR QUE ESTE EXISTE: a janela de 24h de texto livre é aberta pelo LEAD. Uma call
+> marcada para daqui a três dias tem a janela FECHADA na hora de lembrar — e a
+> maioria das calls é assim, porque a agenda oferece os próximos dias livres. Sem
+> este template, o lembrete por WhatsApp simplesmente não sairia.
 
 ## Checklist de aprovação
 

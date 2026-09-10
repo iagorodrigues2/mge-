@@ -64,7 +64,29 @@ export const RETOMADA: WaTemplate = {
   variaveis: (l) => [param(l.contato_nome, "responsável"), param(l.empresa, "sua empresa")],
 };
 
-export const TEMPLATES_ESPERADOS = [ABORDAGEM_GERAL, ABORDAGEM_INDUSTRIA, RETOMADA];
+// Lembrete de reunião. Categoria UTILITY, não Marketing: é a confirmação de um
+// compromisso que o próprio lead agendou — classificação certa e mais barata.
+//
+// Existe porque a janela de 24h de texto livre é aberta pelo LEAD, e uma call
+// marcada para daqui a três dias tem a janela fechada na hora do lembrete. Sem
+// template, o lembrete por WhatsApp simplesmente não sairia — que é a maioria
+// dos casos, já que a agenda oferece os próximos dias.
+export const LEMBRETE_REUNIAO: WaTemplate = {
+  name: "lembrete_reuniao_v1",
+  lang: "pt_BR",
+  body:
+    "Olá, {{1}}. Passando para confirmar sua conversa com o Iago Rodrigues.\n\n" +
+    "Quando: {{2}}\n" +
+    "Link da call: {{3}}\n\n" +
+    "Se precisar remarcar, é só responder esta mensagem.",
+  variaveis: (l) => [
+    param(l.contato_nome, "tudo bem"),
+    param(l.reuniao?.rotulo, "no horário combinado"),
+    param(l.reuniao?.meet, "combinamos por aqui"),
+  ],
+};
+
+export const TEMPLATES_ESPERADOS = [ABORDAGEM_GERAL, ABORDAGEM_INDUSTRIA, RETOMADA, LEMBRETE_REUNIAO];
 
 // O template "industrial" é mais forte quando o perfil está CONFIRMADO (CNAE da
 // Receita ou pista lida no site): ele afirma "o perfil de vocês é o tipo de
