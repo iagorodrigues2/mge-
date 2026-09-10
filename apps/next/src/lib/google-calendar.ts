@@ -29,6 +29,11 @@ function cfg() {
     horaFim: Number(process.env.AGENDA_HORA_FIM || 18),
     // Ninguém marca reunião para daqui a 20 minutos: o lead precisa se
     // organizar e o Iago também.
+    // Sala fixa do Meet. Existe porque uma service account fora do Workspace
+    // NÃO consegue gerar conferência (medido: /api/agenda/testar?meet=1 devolve
+    // meetDisponivel:false). Como a agenda bloqueia o horário, duas calls nunca
+    // caem juntas — a mesma sala serve pra todas, e sai de graça.
+    meetFixo: process.env.MEET_LINK || "",
     antecedenciaH: Number(process.env.AGENDA_ANTECEDENCIA_H || 3),
     diasFrente: Number(process.env.AGENDA_DIAS || 7),
   };
@@ -243,7 +248,8 @@ export async function criarReuniao(opts: {
 
   const corpo: Record<string, unknown> = {
     summary: opts.titulo,
-    description: opts.descricao,
+    description: c.meetFixo ? `${opts.descricao}\n\nLink da call: ${c.meetFixo}` : opts.descricao,
+    ...(c.meetFixo ? { location: c.meetFixo } : {}),
     start: { dateTime: inicio.toISOString(), timeZone: TZ },
     end: { dateTime: fim.toISOString(), timeZone: TZ },
     // Lembrete para o Iago não perder a call marcada pela IA.
@@ -289,10 +295,13 @@ export async function criarReuniao(opts: {
   }
   if (!r.ok) return { ok: false, error: `criar evento: ${r.j.error?.message ?? r.status}` };
 
-  const meet =
+  // Ordem de preferência: o link que a própria Google gerou; senão a sala fixa
+  // configurada; senão nenhum — e aí o agente combina a call pelo WhatsApp.
+  const gerado =
     r.j.hangoutLink ??
     r.j.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri ??
     undefined;
+  const meet = (semMeet ? undefined : gerado) ?? c.meetFixo ?? undefined;
 
   return {
     ok: true,
@@ -301,7 +310,7 @@ export async function criarReuniao(opts: {
       fim: fim.toISOString(),
       eventoId: r.j.id!,
       link: r.j.htmlLink,
-      meet: semMeet ? undefined : meet,
+      meet: meet || undefined,
       rotulo: rotuloHorario(inicio.toISOString()),
     },
   };

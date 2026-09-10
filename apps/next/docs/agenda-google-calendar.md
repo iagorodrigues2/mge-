@@ -96,6 +96,25 @@ confira se colou o e-mail certo e se a permissão é "Fazer alterações".
 
 ---
 
+## Link do Meet — sala fixa (`MEET_LINK`)
+
+MEDIDO em 2026-09-10 nesta conta: `/api/agenda/testar?meet=1` devolveu
+`meetDisponivel: false`. Service account fora do Google Workspace **não gera
+conferência** — e quando a criação com Meet é recusada, a Google recusa o evento
+inteiro (por isso a tentativa é isolada no código).
+
+Solução gratuita: uma **sala fixa** do Meet, criada uma vez e reutilizada. Como a
+agenda bloqueia o horário de cada call, duas conversas nunca acontecem ao mesmo
+tempo — a mesma sala serve para todas.
+
+Como obter: **meet.google.com** → **Nova reunião** → **Criar reunião para depois**
+→ copie o link (`https://meet.google.com/xxx-xxxx-xxx`). Ele não expira.
+
+Cole na Vercel como `MEET_LINK` e faça Redeploy. A partir daí o link entra no
+evento (descrição e local), na confirmação que o lead recebe e no lembrete.
+
+Sem `MEET_LINK`, nada quebra: o agente diz que a conversa será pelo WhatsApp.
+
 ## Como a IA usa isso
 
 - A cada resposta, ela recebe os **3 próximos horários livres** de verdade.

@@ -27,9 +27,10 @@ async function testarMeet() {
     meetDisponivel: !!r.reuniao.meet,
     linkGerado: r.reuniao.meet ?? null,
     eventoApagado: apagou.ok,
+    salaFixaConfigurada: !!process.env.MEET_LINK,
     diagnostico: r.reuniao.meet
       ? "a IA vai mandar o link do Meet junto com a confirmação"
-      : "esta conta NÃO gera link do Meet (limite de service account fora do Workspace) — a IA vai dizer que a call é pelo WhatsApp",
+      : "esta conta NÃO gera link do Meet (limite de service account fora do Workspace) e não há MEET_LINK configurado — a IA vai dizer que a call é pelo WhatsApp",
   };
 }
 
