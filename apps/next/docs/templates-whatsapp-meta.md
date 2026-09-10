@@ -106,6 +106,39 @@ Se fizer sentido, me responde e eu explico em dois minutos.
 
 ---
 
+## Como a máquina usa cada template (ligado em 2026-09-10)
+
+`src/lib/wa-templates.ts` liga a cadência do CRM aos modelos aprovados.
+`dispatchStep` decide o canal antes de enviar:
+
+| Situação | O que sai |
+| --- | --- |
+| Janela de 24h **fechada**, etapa `contato_inicial`, lead **com CNAE ou perfil confirmado** | template `abordagem_industria_v1` |
+| Janela **fechada**, etapa `contato_inicial`, demais leads | template `abordagem_geral_v1` |
+| Janela **fechada**, etapas `followup_1` e `followup_2` | template `retomada_sem_resposta_v1` |
+| Janela **fechada**, etapa `encerramento` | **não envia nada** — encerra em silêncio (o lead vai para `nutrir`) |
+| Janela **aberta** (lead respondeu nas últimas 24h) | texto livre: o agente Vendedor assume |
+
+Por que o `encerramento` não tem template: pagar uma mensagem para avisar que
+vamos parar de procurar só gera custo e risco de denúncia.
+
+O corpo dos templates está **copiado** em `wa-templates.ts` — a Meta envia o
+dela, a cópia serve para registrar no histórico do lead o que ele recebeu e
+para preencher o link `wa.me` no modo assistido. **Mudou o texto na Meta, mude
+lá também**, senão o CRM mente sobre o que foi enviado.
+
+Detalhe de horário: os três textos começam com "Bom dia" e o cron roda 09:00
+BRT — combina. Se um dia o disparo mudar de horário, os templates precisam ser
+reescritos e reaprovados.
+
+### Conferir se está tudo no lugar
+
+`GET /api/whatsapp/templates` compara o que o código pede com o que existe na
+WABA de produção e mostra o número ligado ao `phone id`. É o teste que pega o
+erro silencioso mais caro: template criado na conta de **teste** enquanto a
+produção aponta para a WABA definitiva — no painel da Meta os dois aparecem
+"Active", mas o envio volta com "template does not exist".
+
 ## Checklist de aprovação
 
 1. Meta Business Manager verificado (documento da empresa) — "Step 3. Business

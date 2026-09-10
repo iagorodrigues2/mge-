@@ -72,9 +72,13 @@ export async function advanceCadence(id: string, force = false) {
   if (!force && !isDue(lead)) return { ok: false, blocked: [`aguardando intervalo para ${step}`], attempts: [] };
 
   const res = await dispatchStep(lead, step);
-  if (step === "encerramento" && res.ok) lead.stage = "nutrir"; // encerrou respeitosamente
+  // O encerramento não tem template aprovado de propósito: pagar uma mensagem
+  // para avisar que vamos parar de procurar só gera custo e risco de denúncia.
+  // Sem janela aberta, a cadência simplesmente termina em silêncio.
+  const encerrouSemMensagem = step === "encerramento" && res.semTemplate === true;
+  if (step === "encerramento" && (res.ok || encerrouSemMensagem)) lead.stage = "nutrir";
   await upsertLead(lead);
-  return { ...res, step };
+  return { ...res, step, ok: res.ok || encerrouSemMensagem };
 }
 
 // Processa todos os follow-ups devidos (o "botão" da máquina rodar sozinha).

@@ -6,7 +6,8 @@
 import { getLead, upsertLead } from "./db";
 import { checkOutbound } from "./compliance";
 import { buildMessage } from "./copywriter";
-import { sendWhatsApp } from "./whatsapp";
+import { sendWhatsApp, sendTemplate, whatsappConfigurado } from "./whatsapp";
+import { janelaAberta, templateParaEtapa, renderTemplate } from "./wa-templates";
 import { sendEmail } from "./email";
 import type { Lead, OutreachAttempt } from "./types";
 
@@ -17,6 +18,7 @@ export interface DispatchResult {
   attempts: OutreachAttempt[];
   blocked?: string[];
   waLink?: string;
+  semTemplate?: boolean; // etapa sem template aprovado e janela de 24h fechada
 }
 
 // Envia uma etapa específica para um lead já carregado. Não persiste stage aqui
@@ -25,8 +27,27 @@ export async function dispatchStep(lead: Lead, step: string): Promise<DispatchRe
   const compliance = await checkOutbound(lead);
   if (!compliance.allowed) return { ok: false, lead, step, attempts: [], blocked: compliance.reasons };
 
+  // REGRA QUE MANDA NO CANAL: com a janela de 24h FECHADA (o lead nunca
+  // respondeu, ou respondeu há mais de um dia), a Meta só aceita TEMPLATE
+  // APROVADO. Texto livre volta como erro e o lead fica "contatado" sem nunca
+  // ter recebido nada. Com a janela aberta, vale a copy do copywriter.
+  const janela = janelaAberta(lead);
+  const tpl = janela ? null : templateParaEtapa(step, lead);
   const { text, lint } = buildMessage(step, lead);
-  if (!lint.ok) return { ok: false, lead, step, attempts: [], blocked: lint.problems };
+
+  // O lint vale para o texto livre. O template não passa por ele: quem aprovou
+  // foi a Meta, e reescrever o corpo aqui invalidaria a aprovação.
+  if (!tpl && !janela) {
+    return {
+      ok: false,
+      lead,
+      step,
+      attempts: [],
+      blocked: [`sem template aprovado para a etapa '${step}' e a janela de 24h está fechada`],
+      semTemplate: true,
+    };
+  }
+  if (!tpl && !lint.ok) return { ok: false, lead, step, attempts: [], blocked: lint.problems };
 
   const attempts: OutreachAttempt[] = [];
   let waLink: string | undefined;
@@ -36,12 +57,21 @@ export async function dispatchStep(lead: Lead, step: string): Promise<DispatchRe
   // PABX fixo, que não tem. Preferir sempre o celular.
   const numeroWhatsapp = lead.whatsapp ?? lead.telefone;
   if (numeroWhatsapp) {
-    const wa = await sendWhatsApp(numeroWhatsapp, text);
+    // O corpo do template é copiado para o histórico do lead: sem isso o CRM
+    // registraria a copy do copywriter, que não foi o que o lead recebeu.
+    const corpo = tpl ? renderTemplate(tpl, lead) : text;
+    const wa = tpl
+      ? whatsappConfigurado()
+        ? await sendTemplate(numeroWhatsapp, tpl.name, tpl.variaveis(lead), tpl.lang)
+        : // modo assistido (sem credenciais): link wa.me já com o texto do template
+          await sendWhatsApp(numeroWhatsapp, corpo)
+      : await sendWhatsApp(numeroWhatsapp, corpo);
     const status = wa.status === "enviado" ? "enviado" : wa.status === "assistido" ? "assistido" : "bloqueado";
     if (wa.status === "assistido") waLink = wa.detail;
-    attempts.push({ step, channel: "whatsapp", message: text, status, detail: wa.detail, at: now });
+    const detail = tpl ? `template ${tpl.name} — ${wa.detail}` : wa.detail;
+    attempts.push({ step, channel: "whatsapp", message: corpo, status, detail, at: now });
   }
-  if (lead.email) {
+  if (lead.email && lint.ok) {
     const subject = `Oportunidade em marketplace — ${lead.empresa}`;
     const em = await sendEmail(lead.email, subject, text);
     attempts.push({ step, channel: "email", message: text, status: em.status === "enviado" ? "enviado" : "rascunho", detail: em.detail, at: now });
