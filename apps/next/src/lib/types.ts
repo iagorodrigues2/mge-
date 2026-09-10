@@ -113,6 +113,7 @@ export interface SdrCommercialScore {
 
 export interface SdrState {
   horariosOferecidos?: HorarioOferecido[]; // slots que a IA colocou na mesa no último turno
+  reuniaoMarcada?: ReuniaoMarcada; // call já confirmada — o horário sai dos "livres", e isso não é erro
   origem: "inbound" | "outbound"; // muda a abertura
   nivel: NivelLead;
   ofertaSugerida?: string; // code do pacote que a conversa está apontando agora (pode mudar)
@@ -145,6 +146,9 @@ export interface ReuniaoMarcada {
   fim: string; // ISO
   eventoId: string;
   link?: string; // htmlLink do evento
+  meet?: string; // link do Google Meet (nem sempre a service account consegue criar)
+  avisoLeadEnviado?: string; // ISO — quando o lead recebeu a confirmação
+  lembreteEnviado?: string; // ISO — quando saiu o lembrete de 30 min (evita repetir)
   rotulo: string; // "terça (16/09) às 10h" — como foi dito ao lead
   criadoEm: string; // ISO
 }

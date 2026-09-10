@@ -212,7 +212,7 @@ export async function horarioDisponivel(inicioISO: string): Promise<boolean> {
 }
 
 // ---- criação ----------------------------------------------------------------
-export interface Reuniao { inicio: string; fim: string; eventoId: string; link?: string; rotulo: string }
+export interface Reuniao { inicio: string; fim: string; eventoId: string; link?: string; meet?: string; rotulo: string }
 
 export async function criarReuniao(opts: {
   inicioISO: string;
@@ -222,27 +222,73 @@ export async function criarReuniao(opts: {
   const c = cfg();
   const t = await accessToken();
   if (!t.ok) return { ok: false, error: t.error };
+  const token = t.token;
 
   const inicio = new Date(opts.inicioISO);
   const fim = new Date(inicio.getTime() + c.duracaoMin * 60_000);
 
-  const res = await fetch(`${API}/calendars/${encodeURIComponent(c.calendarId)}/events`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${t.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      summary: opts.titulo,
-      description: opts.descricao,
-      start: { dateTime: inicio.toISOString(), timeZone: TZ },
-      end: { dateTime: fim.toISOString(), timeZone: TZ },
-      // Lembrete para o Iago não perder a call marcada pela IA.
-      reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 }, { method: "email", minutes: 60 }] },
-    }),
-  });
-  const d = (await res.json()) as { id?: string; htmlLink?: string; error?: { message: string } };
-  if (!res.ok || d.error || !d.id) return { ok: false, error: `criar evento: ${d.error?.message ?? res.status}` };
+  const corpo: Record<string, unknown> = {
+    summary: opts.titulo,
+    description: opts.descricao,
+    start: { dateTime: inicio.toISOString(), timeZone: TZ },
+    end: { dateTime: fim.toISOString(), timeZone: TZ },
+    // Lembrete para o Iago não perder a call marcada pela IA.
+    reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 }, { method: "email", minutes: 60 }] },
+  };
+
+  async function criar(comMeet: boolean) {
+    const body = comMeet
+      ? {
+          ...corpo,
+          conferenceData: {
+            createRequest: {
+              requestId: `mge-${inicio.getTime()}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          },
+        }
+      : corpo;
+    const url = `${API}/calendars/${encodeURIComponent(c.calendarId)}/events${comMeet ? "?conferenceDataVersion=1" : ""}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json()) as {
+      id?: string; htmlLink?: string; hangoutLink?: string;
+      conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+      error?: { message: string };
+    };
+    return { ok: r.ok && !j.error && !!j.id, status: r.status, j };
+  }
+
+  // O link do Meet é o que o lead realmente usa para entrar na call. Mas uma
+  // service account fora do Workspace nem sempre tem permissão de criar
+  // conferência: nesse caso a Google recusa o evento INTEIRO. Por isso a
+  // tentativa com Meet é isolada — se ela falhar, cria sem o link em vez de
+  // perder a reunião, e quem avisa que não há link é o agente.
+  let r = await criar(true);
+  let semMeet = false;
+  if (!r.ok) {
+    r = await criar(false);
+    semMeet = true;
+  }
+  if (!r.ok) return { ok: false, error: `criar evento: ${r.j.error?.message ?? r.status}` };
+
+  const meet =
+    r.j.hangoutLink ??
+    r.j.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri ??
+    undefined;
 
   return {
     ok: true,
-    reuniao: { inicio: inicio.toISOString(), fim: fim.toISOString(), eventoId: d.id, link: d.htmlLink, rotulo: rotuloHorario(inicio.toISOString()) },
+    reuniao: {
+      inicio: inicio.toISOString(),
+      fim: fim.toISOString(),
+      eventoId: r.j.id!,
+      link: r.j.htmlLink,
+      meet: semMeet ? undefined : meet,
+      rotulo: rotuloHorario(inicio.toISOString()),
+    },
   };
 }

@@ -86,7 +86,7 @@ export async function montarBriefing(lead: Lead, state: SdrState, motivo: Motivo
   // Se a IA já marcou a call no Google Calendar, o Iago precisa ver a hora
   // no topo do briefing — é a informação que ele age em cima.
   const reuniao = lead.reuniao
-    ? `\n📅 REUNIÃO JÁ MARCADA NA SUA AGENDA: ${lead.reuniao.rotulo}${lead.reuniao.link ? `\n${lead.reuniao.link}` : ""}`
+    ? `\n📅 REUNIÃO JÁ MARCADA NA SUA AGENDA: ${lead.reuniao.rotulo}${lead.reuniao.meet ? `\nMeet: ${lead.reuniao.meet}` : "\n(sem link de Meet — combine o canal com o lead)"}${lead.reuniao.link ? `\nEvento: ${lead.reuniao.link}` : ""}`
     : "";
 
   const pergunta = motivo === "duvida_lead" && state.perguntaPendenteIago

@@ -18,7 +18,10 @@ export function condicaoPagamento(pkg: ServicePackage): string {
     case "projeto_90":
       return "50% na assinatura, 25% em 30 dias e 25% em 60 dias.";
     case "anual":
-      return "Entrada de implantação na assinatura + saldo mensal ao longo de 12 meses.";
+      // NÃO é assinatura nem mensalidade: é o investimento cheio do programa,
+      // que pode ser parcelado. Descrever como "entrada + saldo mensal" fazia o
+      // agente vender como serviço recorrente, que não é o que o Iago entrega.
+      return "Investimento integral do programa, com possibilidade de parcelamento.";
     default:
       return "Pagamento único na contratação.";
   }

@@ -35,6 +35,7 @@ export interface SdrTurn {
   motivo?: string; // por que decidiu isso (para o handoff/log)
   state?: SdrState; // estado do Vendedor depois deste turno
   reuniao?: ReuniaoMarcada; // call criada no Google Calendar neste turno
+  contato?: { nome?: string; email?: string; whatsapp?: string }; // dados que o lead passou neste turno
   violacoes?: string[]; // regras do CLAUDE V3 que a saída bruta feriu
   error?: string;
   backend?: string;
@@ -160,6 +161,18 @@ O diagnóstico é a recomendação para quem está INDECISO ou não sabe onde es
 
 VOLUME MUDA A RÉGUA: quem já vende volume relevante e pede acompanhamento contínuo não é lead de produto de entrada por padrão. Faturamento alto com gargalo declarado (caixa, margem, giro) é exatamente o perfil dos programas maiores — trate como tal, sem inflar e sem rebaixar.`;
 
+const ANTES_DE_OFERTAR = `NÃO EMPURRE PRODUTO ANTES DE QUALIFICAR — regra que vem antes de qualquer recomendação.
+
+Você só NOMEIA um produto como recomendação depois de saber, no mínimo: (a) o que a empresa vende, (b) se já vende hoje em marketplace ou não, (c) o que ela quer — aprender a fazer sozinha, ter alguém acompanhando de perto, ou só entender se o negócio faz sentido — e (d) alguma noção de tamanho (faturamento, volume ou capital disponível).
+
+ERRO GRAVE E COMUM: o lead diz "ainda não vendo" e você responde "então o caminho é o Diagnóstico". Isso não é recomendação, é reflexo. Não vender ainda NÃO significa que a pessoa quer um diagnóstico — ela pode querer mentoria, acompanhamento longo, ou nem estar pronta. Descubra antes.
+
+Enquanto você não tiver o mínimo, a resposta certa é responder o que foi perguntado e fazer UMA pergunta que te aproxime disso. Se o lead pedir o catálogo, apresente TODOS os formatos de forma neutra (isso é informar, não recomendar) e deixe claro que só dá pra indicar o certo depois de entender o caso.
+
+INVESTIMENTO — COMO FALAR: o investimento é o valor CHEIO do programa, e pode ser parcelado. Diga assim: "O investimento é R$ X, e pode ser parcelado." NUNCA descreva como mensalidade, assinatura, "entrada + saldo mensal" ou qualquer coisa que soe como serviço recorrente — não é. Detalhe de parcelamento (número de parcelas, entrada) você NÃO negocia nem inventa: se perguntarem, diga que o formato de parcelamento o Iago fecha com ele.
+
+DADOS DE CONTATO — COLETE, sempre que a conversa avançar: você precisa de NOME, WHATSAPP e E-MAIL. Peça de forma natural e com motivo real ("me passa seu e-mail que eu já te envio o convite com o link da call", "qual o melhor WhatsApp pra te chamar?"). Antes de confirmar uma reunião, o e-mail é obrigatório — é por ele que o convite com o link vai. Se o lead já mandou algum desses dados na conversa, NÃO peça de novo. Devolva o que colher nos campos "contato_nome", "contato_email" e "contato_whatsapp" do JSON.`;
+
 const CONVERSA = `QUALIFICAÇÃO — PERGUNTAR MENOS E MELHOR: não faça questionário. Uma pergunta por vez, quando possível, e só a que muda a PRÓXIMA resposta. Perguntas de alta utilidade: "quanto você vende hoje por mês?", "em quais marketplaces você já opera?", "qual é o principal gargalo hoje?", "você já importa ou compra tudo no Brasil?", "o problema é falta de margem, falta de capital ou falta de estrutura?", "você quer aprender a importar ou quer alguém acompanhando a operação?", "você está escolhendo produto ou já tem SKU validado?".
 
 FLUXO RECOMENDADO: (1) Entrada — entenda o motivo do contato; se ele já fez uma pergunta concreta, NÃO faça uma pergunta genérica, responda primeiro. (2) Resposta — entregue valor imediatamente. (3) Uma pergunta de qualificação — só o que muda a recomendação. (4) Posicionamento — explique qual produto parece mais aderente e por quê. (5) Transparência comercial — preço, prazo e escopo quando perguntado, sempre. (6) Próximo passo — material, mais explicação ou call.
@@ -247,6 +260,17 @@ function blocoContexto(state: SdrState, pacotes: ServicePackage[], horarios?: Ho
   // Os horários vêm do Google Calendar do Iago no momento da chamada. Entram no
   // prompt com o ISO exato porque é o ISO que o modelo devolve em
   // "horario_escolhido" — e só um ISO desta lista cria evento de verdade.
+  // REUNIÃO JÁ MARCADA entra no contexto ANTES dos horários livres. Sem isso a
+  // IA olhava a lista de disponíveis, não via mais o horário que ela própria
+  // acabou de reservar (ele ficou OCUPADO) e concluía que tinha errado —
+  // aconteceu em produção: marcou 10h e no turno seguinte disse que 10h não
+  // constava na agenda.
+  if (state.reuniaoMarcada) {
+    linhas.push(
+      `REUNIÃO JÁ MARCADA E CONFIRMADA: ${state.reuniaoMarcada.rotulo}${state.reuniaoMarcada.meet ? ` — link do Meet: ${state.reuniaoMarcada.meet}` : ""}. Este horário está reservado na agenda do Iago. Ele NÃO aparece mais na lista de horários livres justamente porque foi ocupado por esta reunião — isso é o esperado, não é erro. Nunca sugira que houve engano, nunca reofereça horário, e se o lead perguntar sobre a call, confirme estes dados.${state.reuniaoMarcada.meet ? " O link do Meet acima é onde a conversa acontece — pode repassar ao lead." : " A conversa será pelo WhatsApp — o Iago chama no horário combinado."}`,
+    );
+  }
+
   if (horarios?.length) {
     linhas.push(
       `AGENDA (integração ATIVA — disponibilidade REAL do Iago agora):\n${horarios
@@ -278,6 +302,9 @@ const FORMATO = `FORMATO DA RESPOSTA — responda SOMENTE com um JSON válido, s
   "precisa_resposta_iago": true se NESTA mensagem você disse ao lead que ia confirmar/verificar algo com o Iago e prometeu retornar (ex.: negociar prazo, escopo ou condição fora do padrão — ver bloco de AUTORIZAÇÃO),
   "pergunta_iago": "se precisa_resposta_iago=true, a pergunta EXATA que o Iago precisa responder, em 1 frase",
   "horario_escolhido": "o id EXATO (ISO) do horário da lista de AGENDA que o lead aceitou nesta mensagem, ou null se nenhum foi aceito agora",
+  "contato_nome": "nome do lead, se ele disse em algum momento — senão null",
+  "contato_email": "e-mail do lead, se ele passou — senão null",
+  "contato_whatsapp": "telefone/WhatsApp do lead, se ele passou — senão null",
   "action": "continuar|agendar|handoff_fechamento|sem_fit|nao_interessado|opt_out",
   "motivo": "1-2 frases pro Iago explicando a decisão"
 }
@@ -309,6 +336,7 @@ async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePa
     `VOCÊ ESTÁ FALANDO COM: ${empresa} — segmento ${nicho}.\nFATOS PÚBLICOS CONHECIDOS (matéria-prima da observação; não invente o que não está aqui):\n${leadFacts(lead)}`,
     VERDADE,
     SEGMENTACAO,
+    ANTES_DE_OFERTAR,
     CONVERSA,
     OBJECOES,
     PROTECAO,
@@ -340,6 +368,9 @@ interface ParsedTurn {
   precisaRespostaIago?: boolean;
   perguntaIago?: string;
   horarioEscolhido?: string | null;
+  contatoNome?: string | null;
+  contatoEmail?: string | null;
+  contatoWhatsapp?: string | null;
 }
 
 function parseTurn(raw: string): ParsedTurn {
@@ -367,6 +398,9 @@ function parseTurn(raw: string): ParsedTurn {
       precisaRespostaIago: o.precisa_resposta_iago === true,
       perguntaIago: o.pergunta_iago ? String(o.pergunta_iago) : undefined,
       horarioEscolhido: o.horario_escolhido ? String(o.horario_escolhido) : null,
+      contatoNome: o.contato_nome ? String(o.contato_nome) : null,
+      contatoEmail: o.contato_email ? String(o.contato_email) : null,
+      contatoWhatsapp: o.contato_whatsapp ? String(o.contato_whatsapp) : null,
     };
   } catch {
     return vazio;
@@ -494,6 +528,7 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
       if (r.ok) {
         reuniao = { ...r.reuniao, criadoEm: new Date().toISOString() };
         novoEstado.horariosOferecidos = undefined; // marcou: a lista morreu aqui
+        novoEstado.reuniaoMarcada = reuniao;
       } else {
         falhaAgendamento = r.error;
       }
@@ -518,6 +553,13 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
     motivo: montarMotivo(parsed, novoEstado, acaoFinal) + (reuniao ? ` | 📅 reunião criada: ${reuniao.rotulo}` : falhaAgendamento ? ` | ⚠ agendamento falhou: ${falhaAgendamento}` : ""),
     state: novoEstado,
     reuniao,
+    contato: parsed.contatoNome || parsed.contatoEmail || parsed.contatoWhatsapp
+      ? {
+          nome: parsed.contatoNome ?? undefined,
+          email: parsed.contatoEmail ?? undefined,
+          whatsapp: parsed.contatoWhatsapp ?? undefined,
+        }
+      : undefined,
     violacoes: violacoes.length ? violacoes : undefined,
     backend,
   };
@@ -599,6 +641,17 @@ export function applySdrTurn(lead: Lead, incoming: string, turn: SdrTurn): Lead 
   lead.conversation = conv;
   if (turn.state) lead.sdr = turn.state;
 
+  // Contato colhido na conversa. Só PREENCHE o que falta — o dado do cadastro
+  // (Receita, minerador) não é sobrescrito por algo digitado no chat.
+  if (turn.contato) {
+    if (turn.contato.nome && !lead.contato_nome) lead.contato_nome = turn.contato.nome;
+    if (turn.contato.email && !lead.email) lead.email = turn.contato.email;
+    if (turn.contato.whatsapp && !lead.whatsapp) {
+      const n = normalizarBR(turn.contato.whatsapp);
+      if (n) lead.whatsapp = n;
+    }
+  }
+
   switch (turn.action) {
     case "agendar":
       // Com a agenda integrada, "reunião marcada" só vale se o evento entrou
@@ -630,6 +683,16 @@ export function applySdrTurn(lead: Lead, incoming: string, turn: SdrTurn): Lead 
   }
   lead.updatedAt = now;
   return lead;
+}
+
+// O lead digita o número como fala ("31 98888-7777"), sem o código do país. Sem
+// o 55 na frente a Meta recusa o envio — e recusa em silêncio no caso do
+// template. 10 ou 11 dígitos = número BR sem DDI.
+function normalizarBR(bruto: string): string | null {
+  const d = bruto.replace(/\D/g, "");
+  if (d.length === 10 || d.length === 11) return `55${d}`;
+  if (d.length === 12 || d.length === 13) return d.startsWith("55") ? d : null;
+  return null;
 }
 
 // PORTEIRO — avisa o Iago depois que o turno foi aplicado. Fica separado de

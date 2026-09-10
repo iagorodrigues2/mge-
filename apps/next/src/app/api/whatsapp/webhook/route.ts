@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { addOptOut, listLeads, upsertLead } from "@/lib/db";
 import { applySdrTurn, notificarPorteiro, responderPendenciaIago, sdrRespond } from "@/lib/ai-sdr";
+import { avisarLeadDaReuniao } from "@/lib/reuniao";
 import { pediuParaParar } from "@/lib/sdr-guards";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { normalizarRemetenteBR } from "@/lib/whatsapp-finder";
@@ -231,6 +232,9 @@ export async function POST(req: Request) {
             ];
           }
 
+          // Marcou reunião: o lead recebe a confirmação com o link do Meet
+          // ANTES do aviso ao Iago — quem tem que aparecer na call é ele.
+          if (turn.reuniao) await avisarLeadDaReuniao(lead);
           await notificarPorteiro(lead, turn); // muta porteiro_avisos
           await upsertLead(lead);
           processadas.push({ de: from, acao: turn.action, envio });
