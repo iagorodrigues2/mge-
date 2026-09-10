@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { agendaConfigurada, montarHorarios, proximosHorarios } from "@/lib/google-calendar";
+import { agendaConfigurada, apagarEvento, criarReuniao, montarHorarios, proximosHorarios } from "@/lib/google-calendar";
 
 export const runtime = "nodejs";
 
@@ -8,8 +8,34 @@ export const runtime = "nodejs";
 //    onde se pega erro de FUSO antes de virar reunião marcada na hora errada;
 //  - a disponibilidade REAL só sai com a service account configurada e a agenda
 //    compartilhada com ela.
-export async function GET() {
+// ?meet=1 responde a única pergunta que a leitura da agenda não responde: esta
+// service account consegue criar link do Google Meet? Cria um evento de teste
+// fora do horário comercial, olha se veio link, e APAGA em seguida — a resposta
+// vale mais do que descobrir no primeiro lead de verdade.
+async function testarMeet() {
+  const amanha = new Date(Date.now() + 24 * 3600_000);
+  amanha.setUTCHours(2, 0, 0, 0); // 23h de Brasília: nunca colide com call real
+  const r = await criarReuniao({
+    inicioISO: amanha.toISOString(),
+    titulo: "[TESTE - pode ignorar] Máquina de Vendas",
+    descricao: "Evento de teste criado para verificar se a integração consegue gerar link do Google Meet. É apagado automaticamente.",
+  });
+  if (!r.ok) return { meetDisponivel: false, erro: r.error, eventoApagado: false };
+
+  const apagou = await apagarEvento(r.reuniao.eventoId);
+  return {
+    meetDisponivel: !!r.reuniao.meet,
+    linkGerado: r.reuniao.meet ?? null,
+    eventoApagado: apagou.ok,
+    diagnostico: r.reuniao.meet
+      ? "a IA vai mandar o link do Meet junto com a confirmação"
+      : "esta conta NÃO gera link do Meet (limite de service account fora do Workspace) — a IA vai dizer que a call é pelo WhatsApp",
+  };
+}
+
+export async function GET(req: Request) {
   const configurada = agendaConfigurada();
+  const querMeet = new URL(req.url).searchParams.get("meet") === "1";
   const grade = montarHorarios([], 5).map((h) => ({ rotulo: h.rotulo, inicio: h.inicio }));
 
   if (!configurada) {
@@ -20,6 +46,8 @@ export async function GET() {
       gradeSemAgenda: grade,
     });
   }
+
+  if (querMeet) return NextResponse.json({ ok: true, teste: "meet", ...(await testarMeet()) });
 
   const r = await proximosHorarios(5);
   if (!r.ok) {

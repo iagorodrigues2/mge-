@@ -211,6 +211,20 @@ export async function horarioDisponivel(inicioISO: string): Promise<boolean> {
   return !conflita(inicio, fim, oc.itens);
 }
 
+// Remove um evento (cancelamento, e a limpeza do teste de Meet).
+export async function apagarEvento(eventoId: string): Promise<{ ok: boolean; error?: string }> {
+  const c = cfg();
+  const t = await accessToken();
+  if (!t.ok) return { ok: false, error: t.error };
+  const r = await fetch(`${API}/calendars/${encodeURIComponent(c.calendarId)}/events/${encodeURIComponent(eventoId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${t.token}` },
+  });
+  // 410 = já estava apagado; para o nosso objetivo é sucesso.
+  if (!r.ok && r.status !== 410) return { ok: false, error: `apagar evento: ${r.status}` };
+  return { ok: true };
+}
+
 // ---- criação ----------------------------------------------------------------
 export interface Reuniao { inicio: string; fim: string; eventoId: string; link?: string; meet?: string; rotulo: string }
 
