@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
+import DispatchBatchButton from "@/components/DispatchBatchButton";
 import FindWhatsappButton from "@/components/FindWhatsappButton";
 import QualifyButton from "@/components/QualifyButton";
 import type { Lead } from "@/lib/types";
@@ -41,6 +42,7 @@ export default async function LeadsPage() {
             <QualifyButton />
             <BatchEnrichButton />
             <FindWhatsappButton />
+            <DispatchBatchButton />
           </div>
         )}
       </div>
