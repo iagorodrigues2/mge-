@@ -195,6 +195,7 @@ export interface Lead {
   handoff_reason?: string; // por que o Porteiro escalou pro Iago
   handoff_at?: string; // ISO — quando escalou pro fechamento
   porteiro_avisos?: string[]; // motivos já avisados ao Iago (evita e-mail repetido)
+  attempts_descartados?: OutreachAttempt[]; // tentativas que o CRM registrou mas que nunca saíram (modo assistido sem clique)
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;
