@@ -59,18 +59,34 @@ export async function GET() {
     };
   });
 
-  const faltando = conferencia.filter((c) => !c.pronto);
+  // "não está pronto" tem três causas MUITO diferentes e a saída precisa dizer
+  // qual é: sumido (conta errada / nome trocado) é problema nosso, PENDING é só
+  // esperar a Meta, e REJECTED exige reescrever o texto.
+  const ausentes = conferencia.filter((c) => !c.existeNaWaba);
+  const emAnalise = conferencia.filter((c) => c.status === "PENDING" || c.status === "IN_APPEAL");
+  const reprovados = conferencia.filter((c) => c.status === "REJECTED" || c.status === "DISABLED");
+
+  function resumo(): string {
+    if (ausentes.length) {
+      return `faltam nesta WABA: ${ausentes.map((f) => f.usadoPeloCodigo).join(", ")} — foram criados em outra conta (a de teste) ou com nome/idioma diferente`;
+    }
+    if (reprovados.length) {
+      return `reprovados pela Meta: ${reprovados.map((f) => f.usadoPeloCodigo).join(", ")} — reescrever o texto e reenviar`;
+    }
+    if (emAnalise.length) {
+      return `em análise na Meta: ${emAnalise.map((f) => f.usadoPeloCodigo).join(", ")} — nome, idioma e categoria estão certos, é só aguardar a aprovação`;
+    }
+    return "todos os templates que o disparo usa estão APPROVED nesta WABA";
+  }
 
   return NextResponse.json({
-    ok: faltando.length === 0,
+    ok: ausentes.length === 0 && emAnalise.length === 0 && reprovados.length === 0,
+    podeDisparar: conferencia.every((c) => c.pronto),
     wabaId: WABA_ID,
     phoneIdConfigurado: process.env.WHATSAPP_BUSINESS_PHONE_ID ?? null,
     numeros: dNum.data ?? dNum.error?.message ?? null,
     conferencia,
-    diagnostico:
-      faltando.length === 0
-        ? "todos os templates que o disparo usa estão APPROVED nesta WABA"
-        : `faltam nesta WABA: ${faltando.map((f) => f.usadoPeloCodigo).join(", ")} — foram criados em outra conta (a de teste) ou com nome/idioma diferente`,
+    diagnostico: resumo(),
     templatesNaWaba: naMeta.map((m) => ({ nome: m.name, status: m.status, idioma: m.language, categoria: m.category })),
   });
 }
