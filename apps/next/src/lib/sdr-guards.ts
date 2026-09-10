@@ -171,9 +171,34 @@ function percentuaisCitados(reply: string): number[] {
   return out;
 }
 
-// O lead está mesmo perguntando preço/investimento/planos? (não é a mesma
-// coisa que "quero mais informações").
-const PEDIU_PRECO = /(quanto custa|qual (o |é o )?(valor|pre[çc]o|investimento)|pre[çc]o|or[çc]amento|quanto (fica|sai|custa|é)|t[áa] caro|est[áa] caro|quanto voc[êe]s cobram|(programas?|planos?) e pre[çc]os?|quais s[ãa]o os (programas?|planos?|formatos?))/i;
+// O lead abriu a conversa COMERCIAL? Não é a mesma coisa que "quero mais
+// informações" — mas é muito mais que a pergunta literal "quanto custa".
+//
+// A versão anterior exigia a formulação exata ("quais são os planos") e
+// reprovava "quero saber dos planos de acompanhamento", que é obviamente um
+// pedido comercial. O efeito em produção foi pior do que deixar passar um
+// preço: a resposta boa era bloqueada duas vezes e virava a resposta de
+// segurança — o lead pedia os planos e recebia "me dá um instante que eu
+// confirmo", sem nunca receber nada.
+//
+// A régua certa: perguntou por VALOR, ou por PRODUTO/FORMATO/CONTRATAÇÃO.
+// "Gostaria de mais informações" continua de fora, que era o caso original.
+const PERGUNTA_COMERCIAL = new RegExp(
+  [
+    // valor
+    "quanto custa", "quanto (fica|sai|custa|é|seria)", "quanto voc[êe]s? cobram",
+    "qual (o |é o )?(valor|pre[çc]o|investimento|custo)", "pre[çc]o", "or[çc]amento",
+    "investimento", "t[áa] caro", "est[áa] caro", "cabe no meu or[çc]amento",
+    // produto / formato / contratação — pedido comercial mesmo sem falar em R$
+    "(quais|que|quero saber d?os?|me (fala|explica|diz) d?os?|conhecer os?|ver os?) ?(seus |os )?(planos?|programas?|formatos?|pacotes?|servi[çc]os?)",
+    "planos? de", "programas? de", "op[çc][õo]es de (plano|programa|acompanhamento|contrata)",
+    "acompanhamento", "mentoria", "consultoria mensal",
+    "(quero|queria|preciso|gostaria de) (contratar|fechar|assinar)",
+    "como (funciona a|é a|faço pra) contrata",
+    "per[íi]odo (maior|mais longo)", "prazo mais longo", "mais de perto",
+  ].join("|"),
+  "i",
+);
 
 const TOLERANCIA = 0.05;
 function derivados(base: number[]): number[] {
@@ -265,7 +290,7 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   // conversa (agora ou antes), tiver perguntado por valor/investimento/
   // planos — ver mesmo padrão do script "quais são os programas e preços".
   if (valoresCitados(reply).length > 0) {
-    const leadPediuPreco = [...ctx.historico.filter((m) => m.role === "lead").map((m) => m.text), ctx.incoming].some((t) => PEDIU_PRECO.test(t));
+    const leadPediuPreco = [...ctx.historico.filter((m) => m.role === "lead").map((m) => m.text), ctx.incoming].some((t) => PERGUNTA_COMERCIAL.test(t));
     if (!leadPediuPreco) {
       v.push("preço-não-pedido: citou valor sem o lead ter perguntado preço/investimento/planos — explique o posicionamento e pergunte antes de falar em número");
       bloqueia = true;
@@ -299,7 +324,11 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
-  const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh|programas?( e)? pre[çc]os?/i.test(ctx.incoming);
+  // Quem pede o catálogo, o escopo ou os formatos merece resposta longa — o
+  // limite de tamanho existe contra parede de texto não solicitada, não contra
+  // responder direito o que foi perguntado.
+  const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh/i.test(ctx.incoming)
+    || PERGUNTA_COMERCIAL.test(ctx.incoming);
   if (!pediuDetalhe && reply.length > 700) v.push(`§2: mensagem longa (${reply.length} caracteres) — prefira curta a média`);
 
   return { ok: v.length === 0, violacoes: v, bloqueiaEnvio: bloqueia };

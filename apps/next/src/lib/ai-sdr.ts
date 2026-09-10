@@ -152,7 +152,13 @@ INICIANTE — ainda não vende, nunca importou, quer começar, tem pouco histór
 
 OPERADOR — já vende em Mercado Livre/Amazon/Shopee, já tem catálogo, sente problema em margem, giro, estoque, logística, caixa ou crescimento. Foco: localizar o gargalo, estruturar a operação, diagnóstico ou 360.
 
-AVANÇADO — já importa, opera volume relevante, tem equipe, vende em vários canais, ou pergunta "por que eu precisaria do Iago?". NUNCA venda produto básico pra esse lead. Resposta-base: "Se sua operação já está redonda, talvez você realmente não precise. O valor estaria em encontrar alavancas que ainda não estão capturadas — margem, capital, catálogo, importação, novos canais, fulfillment, giro, estrutura ou crescimento. Se nada disso estiver travando, eu não tentaria te vender um projeto só por vender."`;
+AVANÇADO — já importa, opera volume relevante, tem equipe, vende em vários canais, ou pergunta "por que eu precisaria do Iago?". NUNCA venda produto básico pra esse lead. Resposta-base: "Se sua operação já está redonda, talvez você realmente não precise. O valor estaria em encontrar alavancas que ainda não estão capturadas — margem, capital, catálogo, importação, novos canais, fulfillment, giro, estrutura ou crescimento. Se nada disso estiver travando, eu não tentaria te vender um projeto só por vender."
+
+RESPONDA NA FAMÍLIA QUE FOI PEDIDA (regra de direcionamento): se o lead perguntou por ACOMPANHAMENTO, período maior, programa contínuo, "os planos" ou "os formatos", apresente os produtos DESSA família — escopo, duração e valor. Rebaixar o pedido dele para o diagnóstico de entrada é não responder o que foi perguntado, e é o erro comercial mais caro que você pode cometer: quem pediu acompanhamento longo e ouve "vamos começar por um diagnóstico" entende que você não escutou.
+
+O diagnóstico é a recomendação para quem está INDECISO ou não sabe onde está o gargalo. Não é a resposta padrão para quem pediu outra coisa. Se depois de responder você ainda achar que começar menor é o certo, diga isso como SEGUNDA parte da resposta, com o motivo — nunca no lugar da resposta.
+
+VOLUME MUDA A RÉGUA: quem já vende volume relevante e pede acompanhamento contínuo não é lead de produto de entrada por padrão. Faturamento alto com gargalo declarado (caixa, margem, giro) é exatamente o perfil dos programas maiores — trate como tal, sem inflar e sem rebaixar.`;
 
 const CONVERSA = `QUALIFICAÇÃO — PERGUNTAR MENOS E MELHOR: não faça questionário. Uma pergunta por vez, quando possível, e só a que muda a PRÓXIMA resposta. Perguntas de alta utilidade: "quanto você vende hoje por mês?", "em quais marketplaces você já opera?", "qual é o principal gargalo hoje?", "você já importa ou compra tudo no Brasil?", "o problema é falta de margem, falta de capital ou falta de estrutura?", "você quer aprender a importar ou quer alguém acompanhando a operação?", "você está escolhendo produto ou já tem SKU validado?".
 
@@ -450,6 +456,16 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
   if (bloqueiaFinal) {
     parsed.reply = respostaDeSeguranca();
     parsed.action = "continuar";
+    // A resposta de segurança PROMETE retorno ("me dá um instante que eu
+    // confirmo e te respondo"). Sem avisar o Iago, essa promessa morre ali e o
+    // lead fica esperando pra sempre — foi exatamente o que aconteceu em
+    // produção: o lead pediu os planos, foi bloqueado por um guard, ouviu que
+    // seria confirmado, e ninguém ficou sabendo. Quem promete retorno tem que
+    // gerar a pendência.
+    parsed.precisaRespostaIago = true;
+    parsed.perguntaIago =
+      parsed.perguntaIago ||
+      `O lead perguntou: "${incoming}". A resposta da IA foi bloqueada pelas regras (${violacoes.join("; ")}) e ela prometeu retornar. Responda o que ele precisa saber.`;
   }
 
   const novoEstado = aplicarEstado(state, parsed, pacotes);
