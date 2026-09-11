@@ -1,0 +1,12 @@
+.venv/
+MuseTalk/models/
+MuseTalk/results/
+bruto/
+results/
+saida/
+base/
+*.wav
+*.mp3
+*.mp4
+*.log
+__pycache__/
