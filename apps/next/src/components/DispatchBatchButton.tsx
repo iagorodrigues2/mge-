@@ -28,8 +28,21 @@ export default function DispatchBatchButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [previa, setPrevia] = useState<Previa | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Começa com NENHUM marcado de propósito. São mensagens pagas e
+  // irreversíveis: o certo é o envio exigir escolha consciente, não o
+  // cancelamento exigir atenção.
+  function alternar(id: string) {
+    setEscolhidos((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
 
   async function chamar(confirmar: boolean) {
     setLoading(true);
@@ -38,7 +51,7 @@ export default function DispatchBatchButton() {
       const res = await fetch("/api/leads/dispatch-batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmar, limite: 15 }),
+        body: JSON.stringify({ confirmar, limite: 15, ...(confirmar ? { ids: [...escolhidos] } : {}) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || d.ok === false) throw new Error(d.error ?? "falha no disparo");
@@ -48,6 +61,7 @@ export default function DispatchBatchButton() {
         router.refresh();
       } else {
         setPrevia(d as Previa);
+        setEscolhidos(new Set());
         setResultados(null);
       }
     } catch (e) {
@@ -73,12 +87,26 @@ export default function DispatchBatchButton() {
             </p>
           ) : (
             <>
-              <b>{previa.noLote} empresa(s) vão receber o primeiro contato</b>
+              <b>{previa.noLote} empresa(s) elegíveis</b>
               {previa.restantes > 0 && <div className="sub">+{previa.restantes} ficam para a próxima rodada</div>}
-              <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
+              <div className="sub" style={{ marginTop: 4 }}>
+                Marque quem deve receber agora:{" "}
+                <a href="#" onClick={(e) => { e.preventDefault(); setEscolhidos(new Set(previa.leads.map((l) => l.id))); }}>todos</a>
+                {" · "}
+                <a href="#" onClick={(e) => { e.preventDefault(); setEscolhidos(new Set(previa.leads.filter((l) => l.classe === "TESTE").map((l) => l.id))); }}>só os de teste</a>
+                {" · "}
+                <a href="#" onClick={(e) => { e.preventDefault(); setEscolhidos(new Set()); }}>nenhum</a>
+              </div>
+              <ul style={{ margin: "8px 0", paddingLeft: 0, listStyle: "none" }}>
                 {previa.leads.map((l) => (
-                  <li key={l.id} style={{ marginBottom: 2 }}>
-                    {l.empresa} <span className="sub">({l.classe}) · {l.whatsapp ?? l.email} · {l.template ?? "texto livre"}</span>
+                  <li key={l.id} style={{ marginBottom: 4 }}>
+                    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+                      <input type="checkbox" checked={escolhidos.has(l.id)} onChange={() => alternar(l.id)} style={{ marginTop: 3 }} />
+                      <span>
+                        {l.empresa}
+                        <span className="sub"> ({l.classe}) · {l.whatsapp ?? l.email} · {l.template ?? "texto livre"}</span>
+                      </span>
+                    </label>
                   </li>
                 ))}
               </ul>
@@ -89,8 +117,8 @@ export default function DispatchBatchButton() {
                 <div className="sub">{previa.diagnosticoTemplates}</div>
               )}
               <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                <button onClick={() => chamar(true)} disabled={loading || previa.templatesProntos === false}>
-                  Confirmar envio para {previa.noLote}
+                <button onClick={() => chamar(true)} disabled={loading || previa.templatesProntos === false || escolhidos.size === 0}>
+                  {escolhidos.size === 0 ? "Marque quem vai receber" : `Confirmar envio para ${escolhidos.size}`}
                 </button>
                 <button onClick={() => setPrevia(null)} disabled={loading}>Cancelar</button>
               </div>
