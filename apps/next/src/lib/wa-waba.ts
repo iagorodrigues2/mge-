@@ -4,7 +4,7 @@
 // precisa da resposta antes de queimar mensagem: template ausente ou ainda em
 // análise faz a Meta recusar uma por uma, e cada recusa vira uma tentativa
 // "bloqueado" no histórico do lead sem nenhum ganho.
-import { TEMPLATES_ESPERADOS } from "./wa-templates";
+import { TEMPLATES_ESPERADOS, TEMPLATES_OUTBOUND } from "./wa-templates";
 
 export const WABA_ID = process.env.WHATSAPP_WABA_ID || "1096814143280285";
 
@@ -19,7 +19,8 @@ export interface ConferenciaTemplate {
 }
 
 export interface ConferenciaWaba {
-  ok: boolean;
+  ok: boolean; // TODOS os templates aprovados (visão do painel)
+  okOutbound: boolean; // só os que o primeiro contato usa — é este que libera o disparo
   erro?: string;
   wabaId: string;
   numeros: unknown;
@@ -41,6 +42,7 @@ interface MetaTemplate {
 
 export async function conferirTemplates(): Promise<ConferenciaWaba> {
   const vazio = {
+    okOutbound: false,
     wabaId: WABA_ID,
     numeros: null,
     conferencia: [],
@@ -96,8 +98,10 @@ export async function conferirTemplates(): Promise<ConferenciaWaba> {
         ? `em análise na Meta: ${emAnalise.map((f) => f.usadoPeloCodigo).join(", ")} — nome, idioma e categoria estão certos, é só aguardar a aprovação`
         : "todos os templates que o disparo usa estão APPROVED nesta WABA";
 
+  const nomesOutbound = new Set(TEMPLATES_OUTBOUND.map((t) => t.name));
   return {
     ok: conferencia.every((c) => c.pronto),
+    okOutbound: conferencia.filter((c) => nomesOutbound.has(c.usadoPeloCodigo)).every((c) => c.pronto),
     wabaId: WABA_ID,
     numeros: dNum.data ?? dNum.error?.message ?? null,
     conferencia,

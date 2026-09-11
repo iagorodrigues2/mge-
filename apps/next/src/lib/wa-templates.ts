@@ -86,7 +86,13 @@ export const LEMBRETE_REUNIAO: WaTemplate = {
   ],
 };
 
-export const TEMPLATES_ESPERADOS = [ABORDAGEM_GERAL, ABORDAGEM_INDUSTRIA, RETOMADA, LEMBRETE_REUNIAO];
+// Os que o OUTBOUND usa. É esta lista que trava o disparo em lote — o lembrete
+// de reunião não participa do primeiro contato, e exigir que ele esteja
+// aprovado adiaria o piloto inteiro por um template que ninguém vai usar ali.
+export const TEMPLATES_OUTBOUND = [ABORDAGEM_GERAL, ABORDAGEM_INDUSTRIA, RETOMADA];
+
+// Todos, para o diagnóstico: o painel mostra o estado dos quatro.
+export const TEMPLATES_ESPERADOS = [...TEMPLATES_OUTBOUND, LEMBRETE_REUNIAO];
 
 // O template "industrial" é mais forte quando o perfil está CONFIRMADO (CNAE da
 // Receita ou pista lida no site): ele afirma "o perfil de vocês é o tipo de

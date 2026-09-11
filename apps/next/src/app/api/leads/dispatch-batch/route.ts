@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       elegiveis: candidatos.length,
       noLote: lote.length,
       restantes: Math.max(candidatos.length - lote.length, 0),
-      templatesProntos: check ? check.ok : null,
+      templatesProntos: check ? check.okOutbound : null,
       diagnosticoTemplates: check?.diagnostico ?? "modo assistido (sem credencial): sai link wa.me, não mensagem",
       leads: lote.map((l) => ({
         id: l.id,
@@ -69,7 +69,9 @@ export async function POST(req: Request) {
   // recusada pela Meta vira ruído no histórico do lead e não ensina nada.
   if (whatsappConfigurado()) {
     const check = await conferirTemplates();
-    if (!check.ok) {
+    // Só os templates do PRIMEIRO CONTATO travam o disparo. O lembrete de
+    // reunião pode estar em análise sem impedir o piloto.
+    if (!check.okOutbound) {
       return NextResponse.json(
         { ok: false, enviados: 0, error: `templates não estão prontos — ${check.diagnostico}`, diagnosticoTemplates: check.diagnostico },
         { status: 409 },

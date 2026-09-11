@@ -15,7 +15,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: c.ok,
-    podeDisparar: c.ok,
+    podeDisparar: c.okOutbound, // o disparo só depende dos 3 do primeiro contato
     wabaId: c.wabaId,
     phoneIdConfigurado: process.env.WHATSAPP_BUSINESS_PHONE_ID ?? null,
     numeros: c.numeros,
