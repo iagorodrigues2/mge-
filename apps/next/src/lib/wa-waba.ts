@@ -16,6 +16,11 @@ export interface ConferenciaTemplate {
   categoria: string | null;
   qualidade: string | null;
   pronto: boolean;
+  // O texto aprovado na Meta bate com a cópia que o código guarda? Quando
+  // alguém edita o template no painel e o código não sabe, o histórico do lead
+  // passa a registrar uma mensagem diferente da que o lead recebeu.
+  textoConfere: boolean | null;
+  textoNaMeta?: string;
 }
 
 export interface ConferenciaWaba {
@@ -38,6 +43,18 @@ interface MetaTemplate {
   category: string;
   language: string;
   quality_score?: { score?: string };
+  components?: { type?: string; text?: string }[];
+}
+
+// Normaliza para comparar só o que importa: espaçamento e maiúsculas mudam
+// nada no que o lead lê.
+function normalizar(t: string): string {
+  return t.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function corpoNaMeta(m?: MetaTemplate): string | null {
+  const body = m?.components?.find((c) => (c.type ?? "").toUpperCase() === "BODY");
+  return body?.text ?? null;
 }
 
 // O PERFIL COMERCIAL é a primeira coisa que o lead vê quando chega uma
@@ -114,7 +131,7 @@ export async function conferirTemplates(): Promise<ConferenciaWaba> {
   }
 
   const auth = { headers: { Authorization: `Bearer ${token}` } };
-  const campos = "name,status,category,language,quality_score";
+  const campos = "name,status,category,language,quality_score,components";
   const [rTpl, rNum] = await Promise.all([
     fetch(`https://graph.facebook.com/v20.0/${WABA_ID}/message_templates?fields=${campos}&limit=100`, auth),
     fetch(`https://graph.facebook.com/v20.0/${WABA_ID}/phone_numbers?fields=display_phone_number,verified_name,quality_rating`, auth),
@@ -129,6 +146,8 @@ export async function conferirTemplates(): Promise<ConferenciaWaba> {
   const naMeta = dTpl.data ?? [];
   const conferencia: ConferenciaTemplate[] = TEMPLATES_ESPERADOS.map((esperado) => {
     const achado = naMeta.find((m) => m.name === esperado.name && m.language === esperado.lang);
+    const daMeta = corpoNaMeta(achado);
+    const confere = daMeta ? normalizar(daMeta) === normalizar(esperado.body) : null;
     return {
       usadoPeloCodigo: esperado.name,
       idioma: esperado.lang,
@@ -137,6 +156,8 @@ export async function conferirTemplates(): Promise<ConferenciaWaba> {
       categoria: achado?.category ?? null,
       qualidade: achado?.quality_score?.score ?? null,
       pronto: achado?.status === "APPROVED",
+      textoConfere: confere,
+      ...(confere === false && daMeta ? { textoNaMeta: daMeta } : {}),
     };
   });
 
@@ -147,13 +168,16 @@ export async function conferirTemplates(): Promise<ConferenciaWaba> {
   const emAnalise = conferencia.filter((c) => c.status === "PENDING" || c.status === "IN_APPEAL");
   const reprovados = conferencia.filter((c) => c.status === "REJECTED" || c.status === "DISABLED");
 
+  const divergentes = conferencia.filter((c) => c.textoConfere === false);
   const diagnostico = ausentes.length
     ? `faltam nesta WABA: ${ausentes.map((f) => f.usadoPeloCodigo).join(", ")} — foram criados em outra conta (a de teste) ou com nome/idioma diferente`
     : reprovados.length
       ? `reprovados pela Meta: ${reprovados.map((f) => f.usadoPeloCodigo).join(", ")} — reescrever o texto e reenviar`
       : emAnalise.length
         ? `em análise na Meta: ${emAnalise.map((f) => f.usadoPeloCodigo).join(", ")} — nome, idioma e categoria estão certos, é só aguardar a aprovação`
-        : "todos os templates que o disparo usa estão APPROVED nesta WABA";
+        : divergentes.length
+          ? `texto divergente em: ${divergentes.map((d) => d.usadoPeloCodigo).join(", ")} — o aprovado na Meta não é o que o código registra no histórico do lead`
+          : "todos os templates que o disparo usa estão APPROVED nesta WABA";
 
   // Cada família precisa de UMA versão aprovada — v1 ou v2. Exigir as duas
   // travaria o disparo enquanto a v2 estivesse em análise, sem motivo.
