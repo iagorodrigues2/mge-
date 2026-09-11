@@ -24,6 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav style={{ display: "flex", gap: 18, alignItems: "center" }}>
               <Link href="/">Command Center</Link>
               <Link href="/leads">Leads</Link>
+              <Link href="/metricas">📊 Métricas</Link>
               <Link href="/sdr-chat">💬 Testar IA</Link>
               <Link href="/propostas">Propostas</Link>
               <Link href="/financeiro">Financeiro</Link>
