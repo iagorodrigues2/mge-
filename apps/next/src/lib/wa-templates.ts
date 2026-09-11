@@ -51,15 +51,17 @@ export function saudacaoAgora(agora = new Date()): string {
 //
 // "Olá, {{1}}." resolve a regra da Meta de não começar com variável e continua
 // natural em português — "Olá, boa tarde" é como se fala no WhatsApp comercial.
+// v3 e não v2: o v2 foi apagado para corrigir "logistas" → "lojistas", e a Meta
+// bloqueia o nome de um template deletado por 30 dias.
 export const ABORDAGEM_GERAL_V2: WaTemplate = {
-  name: "abordagem_geral_v2",
+  name: "abordagem_geral_v3",
   lang: "pt_BR",
   // CÓPIA EXATA do que está na Meta (conferido por /api/whatsapp/templates).
   // O Iago editou no painel para o Rafael se apresentar pelo nome e para
   // incluir lojistas — se mudar lá de novo, mude aqui junto, senão o histórico
   // do lead registra uma mensagem que ele nunca recebeu.
   body:
-    "Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, logistas e distribuidores.\n\n" +
+    "Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, lojistas e distribuidores.\n\n" +
     "Vi que a {{2}} atua com {{3}}. Trabalhamos com empresas nesse perfil na parte de margem, catálogo, estrutura de operação e, quando faz sentido, importação direta.\n\n" +
     "Faz sentido eu te explicar em duas linhas por que entrei em contato?",
   variaveis: (l) => [

@@ -52,9 +52,12 @@ resolve a regra da Meta de não começar com variável e soa natural.
 O código escolhe sozinho a melhor versão aprovada: enquanto a v2 estiver em
 análise ele usa a v1; assim que aprovar, passa a usar a v2 sem ninguém mexer.
 
-### `abordagem_geral_v2` · Marketing · Português (BR)
+### `abordagem_geral_v3` · Marketing · Português (BR)
+
+> v3 porque o v2 foi apagado para corrigir "logistas" → "lojistas", e a Meta
+> bloqueia por 30 dias o nome de um template deletado.
 ```
-Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, logistas e distribuidores.
+Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, lojistas e distribuidores.
 
 Vi que a {{2}} atua com {{3}}. Trabalhamos com empresas nesse perfil na parte de margem, catálogo, estrutura de operação e, quando faz sentido, importação direta.
 
