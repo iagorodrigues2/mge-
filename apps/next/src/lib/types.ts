@@ -222,6 +222,7 @@ export interface Lead {
   porteiro_avisos?: string[]; // motivos já avisados ao Iago (evita e-mail repetido)
   attempts_descartados?: OutreachAttempt[]; // tentativas que o CRM registrou mas que nunca saíram (modo assistido sem clique)
   reuniao?: ReuniaoMarcada; // call criada na agenda do Iago pelo agente Agenda
+  teste?: boolean; // lead de teste: passa por cima do corte de score, e fica marcado como tal
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;

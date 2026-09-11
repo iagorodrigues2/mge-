@@ -3,6 +3,7 @@ import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
 import DispatchBatchButton from "@/components/DispatchBatchButton";
+import NovoLeadForm from "@/components/NovoLeadForm";
 import FindWhatsappButton from "@/components/FindWhatsappButton";
 import QualifyButton from "@/components/QualifyButton";
 import type { Lead } from "@/lib/types";
@@ -39,6 +40,7 @@ export default async function LeadsPage() {
         </div>
         {leads.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+            <NovoLeadForm />
             <QualifyButton />
             <BatchEnrichButton />
             <FindWhatsappButton />

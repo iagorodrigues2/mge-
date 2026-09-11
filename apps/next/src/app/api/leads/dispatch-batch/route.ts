@@ -22,7 +22,10 @@ export const maxDuration = 60;
 // saiu, o lead não entra no lote de novo.
 function elegivel(l: Lead): { ok: boolean; motivo?: string } {
   const pot = l.score?.potential ?? "NAO_ABORDAR";
-  if (pot !== "A" && pot !== "B") return { ok: false, motivo: `classe ${pot} (só A e B)` };
+  // Lead de teste existe justamente para experimentar a máquina sem gastar um
+  // lead bom. Ele passa por cima do corte A/B — e continua marcado como teste,
+  // então nunca se confunde com resultado de piloto.
+  if (!l.teste && pot !== "A" && pot !== "B") return { ok: false, motivo: `classe ${pot} (só A e B)` };
   if (l.opt_out) return { ok: false, motivo: "opt-out" };
   if (l.stage === "nao_abordar") return { ok: false, motivo: "marcado como não abordar" };
   if (!l.whatsapp && !l.email) return { ok: false, motivo: "sem canal de contato" };
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
       leads: lote.map((l) => ({
         id: l.id,
         empresa: l.empresa,
-        classe: l.score?.potential,
+        classe: l.teste ? "TESTE" : l.score?.potential,
         whatsapp: l.whatsapp ?? null,
         email: l.email ?? null,
         template: templateParaEtapa("contato_inicial", l)?.name ?? null,
