@@ -4,8 +4,8 @@ import { COOKIE, sessaoValida, senhaConfigurada } from "@/lib/auth";
 
 // A parede. Tudo exige login, MENOS o que precisa ser público para a máquina
 // funcionar:
-//  - o webhook da Meta (ela chama sem cookie; já é autenticado pelo HMAC do
-//    WHATSAPP_APP_SECRET);
+//  - os webhooks da Meta, WhatsApp e Instagram (ela chama sem cookie; ambos já
+//    são autenticados pelo HMAC do App Secret);
 //  - o cron da Vercel (chama sem cookie; protegido pelo CRON_SECRET);
 //  - a política de privacidade (a Meta exige que seja pública para o app ficar
 //    publicado — foi o que destravou o WhatsApp em agosto);
@@ -15,6 +15,7 @@ const PUBLICAS = [
   "/api/auth/login",
   "/privacidade",
   "/api/whatsapp/webhook",
+  "/api/instagram/webhook",
   "/api/cron",
 ];
 

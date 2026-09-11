@@ -11,6 +11,7 @@ import { listLeads, upsertLead } from "./db";
 import { sendEmail } from "./email";
 import { sendTemplate, sendWhatsApp, whatsappConfigurado } from "./whatsapp";
 import { janelaAberta, LEMBRETE_REUNIAO } from "./wa-templates";
+import { enviarDM } from "./instagram";
 import type { Lead } from "./types";
 
 // A janela de 24h de texto livre é aberta pelo LEAD. Uma call marcada para
@@ -18,6 +19,12 @@ import type { Lead } from "./types";
 // é recusado pela Meta. Com a janela aberta manda texto (grátis); fechada,
 // manda o template aprovado (pago, mas chega).
 async function avisarWhats(lead: Lead, textoLivre: string) {
+  // Lead que veio do Instagram não tem número — e nem precisa: a conversa
+  // inteira acontece no Direct, então o aviso vai pelo mesmo canal em que ele
+  // aceitou o horário.
+  if (!lead.whatsapp && !lead.telefone && lead.instagram_id) {
+    return (await enviarDM(lead.instagram_id, textoLivre)).status;
+  }
   const numero = lead.whatsapp ?? lead.telefone;
   if (!numero) return undefined;
   if (janelaAberta(lead)) return (await sendWhatsApp(numero, textoLivre)).status;
@@ -61,7 +68,7 @@ export async function avisarLeadDaReuniao(lead: Lead): Promise<{ email?: string;
 
   // O WhatsApp só sai se a janela de 24h estiver aberta — e ela está, porque o
   // lead acabou de conversar. Best-effort: falhar aqui não pode desmarcar nada.
-  if (lead.whatsapp ?? lead.telefone) {
+  if (lead.whatsapp || lead.telefone || lead.instagram_id) {
     const texto = [
       `Confirmado! ${r.rotulo}.`,
       r.meet ? `Link da call: ${r.meet}` : "",

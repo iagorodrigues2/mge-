@@ -1,6 +1,7 @@
 import { listPackages, activeBackend } from "@/lib/db";
 import { activeLlm } from "@/lib/llm";
 import { agendaConfigurada } from "@/lib/google-calendar";
+import { instagramConfigurado } from "@/lib/instagram";
 import PriceEditor from "@/components/PriceEditor";
 import TestarIaButton from "@/components/TestarIaButton";
 
@@ -28,6 +29,7 @@ export default async function ConfiguracoesPage() {
   const llm = activeLlm();
   const iaOn = llm !== "none";
   const agendaOn = agendaConfigurada();
+  const igOn = instagramConfigurado();
 
   return (
     <main>
@@ -46,6 +48,8 @@ export default async function ConfiguracoesPage() {
           hint="Defina SMTP_HOST/PORT/USER/PASS/FROM. Sem isso, o e-mail vira rascunho." />
         <Status on={iaOn} label={`Cérebro da IA (agente Vendedor)${iaOn ? ` — ${llm}` : ""}`}
           hint="Defina ANTHROPIC_API_KEY (e ANTHROPIC_MODEL) nas variáveis de ambiente. Sem isso o agente Vendedor não conversa. Presença da chave ≠ chave válida: use o teste abaixo." />
+        <Status on={igOn} label="Instagram Direct — o Rafael atende quem chega"
+          hint="Defina IG_PAGE_TOKEN + IG_USER_ID e assine o webhook nos campos messages e comments. Canal de ENTRADA: no Instagram não existe template, então ele nunca sai atrás de ninguém." />
         <Status on={agendaOn} label="Agenda (Google Calendar) — o agente marca a reunião sozinho"
           hint="Defina GOOGLE_SA_EMAIL + GOOGLE_SA_PRIVATE_KEY + GOOGLE_CALENDAR_ID e compartilhe a agenda com a service account (docs/agenda-google-calendar.md). Sem isso, a IA promete retorno e você marca na mão. Confira em /api/agenda/testar." />
         <TestarIaButton />

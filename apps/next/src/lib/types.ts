@@ -133,7 +133,7 @@ export interface SdrState {
 
 export interface OutreachAttempt {
   step: string; // contato_inicial | followup_1 | ...
-  channel: "whatsapp" | "email";
+  channel: "whatsapp" | "email" | "instagram";
   message: string;
   status: "enviado" | "rascunho" | "bloqueado" | "assistido";
   detail?: string; // link wa.me, id da mensagem, motivo do bloqueio
@@ -223,6 +223,12 @@ export interface Lead {
   attempts_descartados?: OutreachAttempt[]; // tentativas que o CRM registrou mas que nunca saíram (modo assistido sem clique)
   reuniao?: ReuniaoMarcada; // call criada na agenda do Iago pelo agente Agenda
   teste?: boolean; // lead de teste: passa por cima do corte de score, e fica marcado como tal
+
+  // --- Instagram (canal de entrada) ---
+  instagram_id?: string; // IGSID — o id do usuário no escopo do nosso app
+  instagram_user?: string; // @usuario, quando a API devolve
+  ig_ultimo_mid?: string; // última mensagem processada: a Meta reenvia o mesmo evento
+  ig_comentarios_respondidos?: string[]; // a resposta privada só pode sair 1x por comentário
   stage: LeadStage;
   approved: boolean;
   opt_out: boolean;
