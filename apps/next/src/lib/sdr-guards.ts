@@ -19,6 +19,27 @@ const SE_PASSA_POR_IAGO: RegExp[] = [
   /\bfala(ndo)? com o iago aqui\b/i,
 ];
 
+// Dizer que não tem nome virou um problema real: o lead perguntou "qual seu
+// nome?" e recebeu "não tenho um nome específico", que é a forma mais rápida de
+// anunciar que é um robô sem ninguém ter perguntado. Ele se chama Rafael.
+const NEGA_TER_NOME: RegExp[] = [
+  /n[ãa]o tenho um nome/i,
+  /n[ãa]o possuo (um )?nome/i,
+  /n[ãa]o tenho nome/i,
+];
+
+// Anunciar que é IA sem ninguém perguntar. Se o LEAD perguntar, a resposta
+// honesta é obrigatória — por isso o guard só vale quando não houve pergunta.
+const ANUNCIA_SER_IA: RegExp[] = [
+  /n[ãa]o sou (uma )?(pessoa|humano|ser humano)/i,
+  /sou (uma |um )?(intelig[êe]ncia artificial|ia|rob[ôo]|bot)\b/i,
+  /n[ãa]o sou (uma )?pessoa f[íi]sica/i,
+  /sou (um )?assistente virtual/i,
+];
+
+const LEAD_PERGUNTOU_SE_E_IA =
+  /(é|e|voc[êe] é|vc é|isso é)\s*(um\s*)?(rob[ôo]|bot|ia|intelig[êe]ncia artificial|autom[áa]tico|automatizado)|falando com (uma )?(pessoa|humano|m[áa]quina)|tem (uma )?pessoa (a[íi]|do outro lado)|voc[êe] é (real|humano|de verdade)/i;
+
 // ===== OPT-OUT (V3 §11) — lista literal do documento, mais variações óbvias.
 // São frases INTEIRAS: podem aparecer em qualquer ponto da mensagem porque não
 // têm outro sentido possível. Diferente de uma palavra solta ("parar", "sair"),
@@ -253,6 +274,26 @@ export function checarResposta(ctx: GuardContext): GuardResult {
     }
   }
 
+  for (const re of NEGA_TER_NOME) {
+    if (re.test(reply)) {
+      v.push("identidade: disse que não tem nome — você é o Rafael, responda o nome com naturalidade");
+      bloqueia = true;
+      break;
+    }
+  }
+
+  // Só é violação quando o lead NÃO perguntou. Perguntou, a verdade é
+  // obrigatória e a resposta passa.
+  if (!LEAD_PERGUNTOU_SE_E_IA.test(ctx.incoming)) {
+    for (const re of ANUNCIA_SER_IA) {
+      if (re.test(reply)) {
+        v.push("identidade: anunciou ser IA sem o lead ter perguntado — apresente-se como Rafael, do time comercial do Iago");
+        bloqueia = true;
+        break;
+      }
+    }
+  }
+
   for (const re of BENCHMARK_INVENTADO) {
     if (re.test(reply)) { v.push("§14/§24: benchmark/estatística de mercado ou urgência inventada"); bloqueia = true; break; }
   }
@@ -335,13 +376,15 @@ export function checarResposta(ctx: GuardContext): GuardResult {
 }
 
 // Último recurso da identidade: substituição literal, não geração.
+// Troca literal de quem se apresentou como o Iago. O assistente se chama
+// RAFAEL: "meu nome é Iago" vira "sou o Rafael, assistente comercial do Iago".
 export function corrigirIdentidade(reply: string): string {
   const trocado = reply
     .replace(/\b(sou|aqui (é|e))\s+o\s+iago\s+rodrigues\b/gi, "trabalho com o Iago Rodrigues")
     .replace(/\b(sou|aqui (é|e))\s+o\s+iago\b/gi, "trabalho com o Iago")
     .replace(/\bsou\s+iago\s+rodrigues\b/gi, "trabalho com o Iago Rodrigues")
     .replace(/\bsou\s+iago\b/gi, "trabalho com o Iago")
-    .replace(/\b(meu nome (é|e)|me chamo)\s+iago(\s+rodrigues)?\b/gi, "sou o assistente comercial do Iago Rodrigues");
+    .replace(/\b(meu nome (é|e)|me chamo)\s+iago(\s+rodrigues)?\b/gi, "sou o Rafael, assistente comercial do Iago Rodrigues");
   return trocado.replace(/(^|[.!?]\s+|\n\s*)([a-zà-ú])/g, (_, antes: string, letra: string) => antes + letra.toUpperCase());
 }
 
