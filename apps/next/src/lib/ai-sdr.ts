@@ -85,6 +85,12 @@ function leadFacts(lead: Lead): string {
   }
   if (lead.website) f.push(`Site: ${lead.website}`);
   if (lead.instagram) f.push(`Instagram: ${lead.instagram}`);
+  // Quem veio pelo quiz já contou o momento, o faturamento e a dor. Repetir a
+  // pergunta é jogar fora a confiança que ele deu ao responder.
+  if (lead.diagnostico) {
+    const d = lead.diagnostico;
+    f.push(`Respondeu o diagnóstico no site: momento "${d.momento}"; faturamento mensal "${d.faturamento}"; maior trava "${d.dor}". Use isso — NÃO pergunte de novo.`);
+  }
 
   // A lista do que NÃO temos é tão importante quanto a do que temos: é ela que
   // impede a IA de dizer "acompanhamos o perfil de vocês no Instagram".

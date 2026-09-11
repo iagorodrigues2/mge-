@@ -86,6 +86,8 @@ const INTERESSE = new RegExp(
     "como (funciona|faz|fa[çc]o|posso)", "info(rma[çc][õo]es)?", "saber mais",
     "manda(r)? (no )?(direct|dm|privado)", "chama(r)? no", "me chama",
     "consultoria", "mentoria", "ajuda", "dispon[íi]vel", "atende",
+    // palavras-gatilho que os reels pedem ("comenta DIAGNÓSTICO que eu te mando")
+    "diagn[óo]stico", "planilha", "checklist", "guia", "material", "lista",
   ].join("|"),
   "i",
 );

@@ -9,11 +9,15 @@ import { COOKIE, sessaoValida, senhaConfigurada } from "@/lib/auth";
 //  - o cron da Vercel (chama sem cookie; protegido pelo CRON_SECRET);
 //  - a política de privacidade (a Meta exige que seja pública para o app ficar
 //    publicado — foi o que destravou o WhatsApp em agosto);
+//  - o diagnóstico (/diagnostico): é o link da bio do Instagram — quem chega
+//    dali não tem senha, e é justamente quem a máquina quer;
 //  - a própria tela de login.
 const PUBLICAS = [
   "/login",
   "/api/auth/login",
   "/privacidade",
+  "/diagnostico",
+  "/api/diagnostico",
   "/api/whatsapp/webhook",
   "/api/instagram/webhook",
   "/api/cron",
@@ -23,11 +27,21 @@ function ehPublica(path: string): boolean {
   return PUBLICAS.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
+// Páginas viradas pro CLIENTE (não pro operador): o layout esconde a marca
+// "Máquina de Vendas" nelas — lead não precisa saber que existe um painel.
+const DE_CLIENTE = ["/diagnostico"];
+
+function seguir(req: NextRequest, pathname: string): NextResponse {
+  const headers = new Headers(req.headers);
+  headers.set("x-pagina-cliente", DE_CLIENTE.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ? "1" : "0");
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (ehPublica(pathname)) return NextResponse.next();
+  if (ehPublica(pathname)) return seguir(req, pathname);
 
-  if (await sessaoValida(req.cookies.get(COOKIE)?.value)) return NextResponse.next();
+  if (await sessaoValida(req.cookies.get(COOKIE)?.value)) return seguir(req, pathname);
 
   // API responde 401 em JSON; página redireciona para o login. Sem isso, um
   // fetch do painel receberia o HTML da tela de login e quebraria com um erro

@@ -163,6 +163,16 @@ export interface HorarioOferecido {
   rotulo: string;
 }
 
+// Respostas do quiz público. Guardadas cruas (o texto da opção) para o SDR
+// citar de volta ("você disse que fatura entre X e Y") sem tradução no meio.
+export interface DiagnosticoRespostas {
+  momento: string; // "Ainda não vendo em marketplace" | ...
+  faturamento: string; // faixa mensal da empresa, auto-declarada
+  dor: string; // o que mais trava hoje
+  rota: "prioritario" | "nutrir"; // pra onde o quiz mandou
+  respondidoEm: string; // ISO
+}
+
 export interface Lead {
   id: string;
   empresa: string;
@@ -223,6 +233,11 @@ export interface Lead {
   attempts_descartados?: OutreachAttempt[]; // tentativas que o CRM registrou mas que nunca saíram (modo assistido sem clique)
   reuniao?: ReuniaoMarcada; // call criada na agenda do Iago pelo agente Agenda
   teste?: boolean; // lead de teste: passa por cima do corte de score, e fica marcado como tal
+
+  // --- Diagnóstico pelo site (/diagnostico) ---
+  // O que o lead respondeu no quiz antes de chamar no WhatsApp. É a única
+  // fonte de "faturamento" que não é chute: veio da boca dele.
+  diagnostico?: DiagnosticoRespostas;
 
   // --- Instagram (canal de entrada) ---
   instagram_id?: string; // IGSID — o id do usuário no escopo do nosso app

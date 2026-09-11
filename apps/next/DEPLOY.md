@@ -29,6 +29,7 @@ Qualquer Postgres serve (Neon, Supabase, Vercel Postgres). Recomendado: **Neon**
    - `DATABASE_URL` = string do passo 1 (obrigatória)
    - `SERPER_API_KEY` (busca real de leads — opcional)
    - `WHATSAPP_BUSINESS_TOKEN`, `WHATSAPP_BUSINESS_PHONE_ID` (envio WhatsApp — opcional)
+   - `WHATSAPP_COMERCIAL_NUMERO` (o número da API em E.164, ex: `5511999999999` — é o wa.me que o `/diagnostico`, link da bio do Instagram, abre; sem ele a página só agradece)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (e-mail — opcional)
 5. Deploy. Abra `/configuracoes` e confira **"Banco de dados: Postgres" = LIGADO**.
 

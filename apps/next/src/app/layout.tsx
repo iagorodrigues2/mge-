@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import SairButton from "@/components/SairButton";
 import { COOKIE, sessaoValida } from "@/lib/auth";
 
@@ -14,11 +14,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Fora da sessão (tela de login, política de privacidade) o menu não aparece:
   // são links para páginas que a parede vai bloquear de qualquer jeito.
   const logado = await sessaoValida((await cookies()).get(COOKIE)?.value);
+  // Página de cliente (/diagnostico, vinda da bio do Instagram): sem cabeçalho.
+  // A marca "Máquina de Vendas" é do operador, não do lead.
+  const paginaCliente = (await headers()).get("x-pagina-cliente") === "1";
 
   return (
     <html lang="pt-br">
       <body>
-        <header className="top">
+        {!paginaCliente && <header className="top">
           <span className="brand">🚀 Máquina de Vendas</span>
           {logado && (
             <nav style={{ display: "flex", gap: 18, alignItems: "center" }}>
@@ -32,7 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <SairButton />
             </nav>
           )}
-        </header>
+        </header>}
         {children}
       </body>
     </html>
