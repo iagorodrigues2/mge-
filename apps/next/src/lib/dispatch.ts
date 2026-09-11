@@ -23,7 +23,7 @@ export interface DispatchResult {
 
 // Envia uma etapa específica para um lead já carregado. Não persiste stage aqui
 // além de anexar as tentativas — o chamador decide o stage.
-export async function dispatchStep(lead: Lead, step: string): Promise<DispatchResult> {
+export async function dispatchStep(lead: Lead, step: string, aprovados?: Set<string>): Promise<DispatchResult> {
   const compliance = await checkOutbound(lead);
   if (!compliance.allowed) return { ok: false, lead, step, attempts: [], blocked: compliance.reasons };
 
@@ -32,7 +32,7 @@ export async function dispatchStep(lead: Lead, step: string): Promise<DispatchRe
   // APROVADO. Texto livre volta como erro e o lead fica "contatado" sem nunca
   // ter recebido nada. Com a janela aberta, vale a copy do copywriter.
   const janela = janelaAberta(lead);
-  const tpl = janela ? null : templateParaEtapa(step, lead);
+  const tpl = janela ? null : templateParaEtapa(step, lead, aprovados);
   const { text, lint } = buildMessage(step, lead);
 
   // O lint vale para o texto livre. O template não passa por ele: quem aprovou
@@ -83,12 +83,12 @@ export async function dispatchStep(lead: Lead, step: string): Promise<DispatchRe
 }
 
 // Etapa 4: aprovar → enviar contato inicial.
-export async function approveAndSend(id: string, step = "contato_inicial"): Promise<DispatchResult> {
+export async function approveAndSend(id: string, step = "contato_inicial", aprovados?: Set<string>): Promise<DispatchResult> {
   const lead = await getLead(id);
   if (!lead) return { ok: false, attempts: [], blocked: ["lead não encontrado"] };
   lead.approved = true;
 
-  const res = await dispatchStep(lead, step);
+  const res = await dispatchStep(lead, step, aprovados);
   lead.stage = res.ok ? "contatado" : "aprovado";
   await upsertLead(lead);
   return res;

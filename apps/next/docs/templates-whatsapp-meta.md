@@ -38,6 +38,52 @@ depois, na conversa livre.
 
 ---
 
+## ⚠️ v2 — SUBMETER ESTES (a v1 tinha "Bom dia" fixo)
+
+A v1 travava a saudação no corpo aprovado: disparo à tarde mandava "Bom dia", e
+o follow-up automático da cadência (que roda em horário que ninguém controla)
+mandaria "Bom dia" às 15h. Também dizia "Bom dia, responsável" — e anunciar
+"responsável" na primeira linha entrega que é disparo automático.
+
+Na v2 a saudação é **variável calculada no envio** (fuso de São Paulo: até 12h
+"bom dia", até 18h "boa tarde", depois "boa noite") e o nome sai. `Olá, {{1}}.`
+resolve a regra da Meta de não começar com variável e soa natural.
+
+O código escolhe sozinho a melhor versão aprovada: enquanto a v2 estiver em
+análise ele usa a v1; assim que aprovar, passa a usar a v2 sem ninguém mexer.
+
+### `abordagem_geral_v2` · Marketing · Português (BR)
+```
+Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes e distribuidores.
+
+Vi que a {{2}} atua com {{3}}. Trabalhamos com empresas nesse perfil na parte de margem, catálogo, estrutura de operação e, quando faz sentido, importação direta.
+
+Faz sentido eu te explicar em duas linhas por que entrei em contato?
+```
+Exemplos: `{{1}}` = `boa tarde` · `{{2}}` = `Teka` · `{{3}}` = `cama, mesa e banho`
+
+### `abordagem_industria_v2` · Marketing · Português (BR)
+```
+Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues.
+
+Ele trabalha com indústrias e distribuidores em duas frentes: estruturação da operação em marketplace (catálogo, margem, estoque, logística) e importação — do diagnóstico de viabilidade até o acompanhamento da operação completa.
+
+Estou entrando em contato com a {{2}} porque o perfil de vocês é o tipo de operação em que ele costuma atuar. Posso te explicar rapidamente o motivo do contato?
+```
+Exemplos: `{{1}}` = `bom dia` · `{{2}}` = `Probel`
+
+### `retomada_sem_resposta_v2` · Marketing · Português (BR)
+```
+Olá, {{1}}. Retomando meu contato sobre a operação da {{2}}.
+
+Não quero tomar seu tempo à toa: se não for prioridade agora, é só me dizer que eu encerro por aqui.
+
+Se fizer sentido, me responde e eu explico em dois minutos.
+```
+Exemplos: `{{1}}` = `boa tarde` · `{{2}}` = `Teka`
+
+---
+
 ## Template 1 — `abordagem_geral_v1` (principal)
 
 **Nome:** `abordagem_geral_v1`

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { conferirTemplates } from "@/lib/wa-waba";
+import { conferirPerfil, conferirTemplates } from "@/lib/wa-waba";
 
 export const runtime = "nodejs";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 // exist" — e o painel da Meta não avisa, porque nas duas contas aparece
 // "Active". Também responde qual número está ligado ao phone id configurado.
 export async function GET() {
-  const c = await conferirTemplates();
+  const [c, perfil] = await Promise.all([conferirTemplates(), conferirPerfil()]);
   if (c.erro) return NextResponse.json({ ok: false, wabaId: c.wabaId, error: c.erro }, { status: 400 });
 
   return NextResponse.json({
@@ -19,6 +19,20 @@ export async function GET() {
     wabaId: c.wabaId,
     phoneIdConfigurado: process.env.WHATSAPP_BUSINESS_PHONE_ID ?? null,
     numeros: c.numeros,
+    // O que o lead vê antes de ler a mensagem.
+    perfilComercial: perfil.erro
+      ? { erro: perfil.erro }
+      : {
+          completo: perfil.ok,
+          temFoto: !!perfil.foto,
+          foto: perfil.foto,
+          descricao: perfil.descricao,
+          sobre: perfil.sobre,
+          sites: perfil.sites,
+          email: perfil.email,
+          setor: perfil.setor,
+          faltando: perfil.faltando,
+        },
     conferencia: c.conferencia,
     diagnostico: c.diagnostico,
     templatesNaWaba: c.templatesNaWaba,

@@ -70,8 +70,12 @@ export async function POST(req: Request) {
   // ENVIO — só chega aqui com confirmação explícita.
   // Se os templates não estiverem APPROVED, parar ANTES: cada tentativa
   // recusada pela Meta vira ruído no histórico do lead e não ensina nada.
+  let aprovados: Set<string> | undefined;
   if (whatsappConfigurado()) {
     const check = await conferirTemplates();
+    // Quais versões existem APROVADAS agora — é isso que deixa o disparo usar a
+    // v2 (saudação certa) assim que a Meta liberar, sem ninguém mexer em nada.
+    aprovados = new Set(check.conferencia.filter((c) => c.pronto).map((c) => c.usadoPeloCodigo));
     // Só os templates do PRIMEIRO CONTATO travam o disparo. O lembrete de
     // reunião pode estar em análise sem impedir o piloto.
     if (!check.okOutbound) {
@@ -88,7 +92,7 @@ export async function POST(req: Request) {
   // Sequencial de propósito: são poucos leads, e disparar em paralelo esconde
   // qual mensagem causou qual erro da Meta.
   for (const lead of lote) {
-    const r = await approveAndSend(lead.id, "contato_inicial");
+    const r = await approveAndSend(lead.id, "contato_inicial", aprovados);
     const wa = r.attempts.find((a) => a.channel === "whatsapp");
     const email = r.attempts.find((a) => a.channel === "email");
     const principal = wa ?? email;
