@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLead, listPackages, listProposals } from "@/lib/db";
 import { dueInfo } from "@/lib/cadence";
+import { dataHora } from "@/lib/datas";
 import PostButton from "@/components/PostButton";
 import ProposalForm from "@/components/ProposalForm";
 import EnrichForm from "@/components/EnrichForm";
@@ -152,7 +153,7 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
               </tbody>
             </table>
             <p className="hint" style={{ marginTop: 10 }}>
-              Confirmado na Receita em {new Date(lead.enriched_at).toLocaleString("pt-BR")} via {lead.enrich_source}.
+              Confirmado na Receita em {dataHora(lead.enriched_at)} via {lead.enrich_source}.
             </p>
             <div style={{ marginTop: 12 }}><EnrichForm leadId={id} initialCnpj={lead.cnpj} /></div>
           </>
@@ -174,7 +175,7 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
             )}
             {lead.conversation.map((c, i) => (
               <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
-                <div className="hint"><b>{c.role === "lead" ? "LEAD" : "IA"}</b> · {new Date(c.at).toLocaleString("pt-BR")}</div>
+                <div className="hint"><b>{c.role === "lead" ? "LEAD" : "IA"}</b> · {dataHora(c.at)}</div>
                 <div className="msg">{c.text}</div>
               </div>
             ))}
@@ -188,7 +189,7 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
         {lead.attempts.map((a, i) => (
           <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
             <div className="hint">
-              <b>{STEP_LABEL[a.step] ?? a.step}</b> · {a.channel} · {a.status} · {new Date(a.at).toLocaleString("pt-BR")}
+              <b>{STEP_LABEL[a.step] ?? a.step}</b> · {a.channel} · {a.status} · {dataHora(a.at)}
               {a.status === "assistido" && a.detail?.startsWith("http") && <> · <a className="wa" href={a.detail} target="_blank" rel="noreferrer">abrir WhatsApp ↗</a></>}
             </div>
             <div className="msg">{a.message}</div>

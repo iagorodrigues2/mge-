@@ -19,6 +19,7 @@ import type {
 } from "./types";
 import { resumoEstado, stateOf, validarOferta } from "./sdr-state";
 import { agendaConfigurada, criarReuniao, horarioDisponivel, proximosHorarios, type Horario } from "./google-calendar";
+import { agoraPorExtenso } from "./datas";
 import {
   AGENDA_INTEGRADA, checarResposta, contaPerguntas, corrigirIdentidade,
   type FatosDoLead, pediuParaParar, respostaDeSeguranca,
@@ -344,6 +345,10 @@ async function buildSystemPrompt(lead: Lead, state: SdrState, pacotes: ServicePa
   const conhecimento = await conhecimentoTexto();
 
   return [
+    // Sem isto o modelo deduz a data do nada e erra "amanhã", "hoje à tarde",
+    // "semana que vem" — e o servidor roda em UTC, que não é o fuso de ninguém
+    // nesta conversa.
+    `AGORA: ${agoraPorExtenso()} (horário de Brasília). Use isto como referência de data e hora — nunca suponha outra.`,
     IDENTIDADE,
     `VOCÊ ESTÁ FALANDO COM: ${empresa} — segmento ${nicho}.\nFATOS PÚBLICOS CONHECIDOS (matéria-prima da observação; não invente o que não está aqui):\n${leadFacts(lead)}`,
     VERDADE,

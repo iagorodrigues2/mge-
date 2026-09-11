@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listDeals, listProposals } from "@/lib/db";
 import { revenueFromDeals } from "@/lib/financeiro";
 import { brl } from "@/lib/pricing";
+import { data } from "@/lib/datas";
 import PostButton from "@/components/PostButton";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ export default async function FinanceiroPage() {
                     <td>{i.label}</td>
                     <td>{brl(i.valor)}</td>
                     <td className="hint">{i.dueDate ?? "—"}</td>
-                    <td>{i.status === "pago" ? <span className="msg ok">pago{i.paidAt ? ` · ${new Date(i.paidAt).toLocaleDateString("pt-BR")}` : ""}</span> : <span className="hint">pendente</span>}</td>
+                    <td>{i.status === "pago" ? <span className="msg ok">pago{i.paidAt ? ` · ${data(i.paidAt)}` : ""}</span> : <span className="hint">pendente</span>}</td>
                     <td>
                       {i.status !== "pago" && (
                         <PostButton url={`/api/deals/${d.id}/pay`} body={{ n: i.n }} className="primary"
