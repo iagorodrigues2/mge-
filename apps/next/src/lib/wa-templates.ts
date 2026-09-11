@@ -54,8 +54,12 @@ export function saudacaoAgora(agora = new Date()): string {
 export const ABORDAGEM_GERAL_V2: WaTemplate = {
   name: "abordagem_geral_v2",
   lang: "pt_BR",
+  // CÓPIA EXATA do que está na Meta (conferido por /api/whatsapp/templates).
+  // O Iago editou no painel para o Rafael se apresentar pelo nome e para
+  // incluir lojistas — se mudar lá de novo, mude aqui junto, senão o histórico
+  // do lead registra uma mensagem que ele nunca recebeu.
   body:
-    "Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes e distribuidores.\n\n" +
+    "Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, logistas e distribuidores.\n\n" +
     "Vi que a {{2}} atua com {{3}}. Trabalhamos com empresas nesse perfil na parte de margem, catálogo, estrutura de operação e, quando faz sentido, importação direta.\n\n" +
     "Faz sentido eu te explicar em duas linhas por que entrei em contato?",
   variaveis: (l) => [
@@ -68,8 +72,9 @@ export const ABORDAGEM_GERAL_V2: WaTemplate = {
 export const ABORDAGEM_INDUSTRIA_V2: WaTemplate = {
   name: "abordagem_industria_v2",
   lang: "pt_BR",
+  // CÓPIA EXATA do que está na Meta — ver comentário acima.
   body:
-    "Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues.\n\n" +
+    "Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues.\n\n" +
     "Ele trabalha com indústrias e distribuidores em duas frentes: estruturação da operação em marketplace (catálogo, margem, estoque, logística) e importação — do diagnóstico de viabilidade até o acompanhamento da operação completa.\n\n" +
     "Estou entrando em contato com a {{2}} porque o perfil de vocês é o tipo de operação em que ele costuma atuar. Posso te explicar rapidamente o motivo do contato?",
   variaveis: (l) => [saudacaoAgora(), param(l.empresa, "sua empresa")],

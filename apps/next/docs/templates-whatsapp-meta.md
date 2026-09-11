@@ -54,7 +54,7 @@ análise ele usa a v1; assim que aprovar, passa a usar a v2 sem ninguém mexer.
 
 ### `abordagem_geral_v2` · Marketing · Português (BR)
 ```
-Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes e distribuidores.
+Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues — ele trabalha com implantação e escala de operações de marketplace (Mercado Livre, Amazon, Shopee) e também com importação, para fabricantes, logistas e distribuidores.
 
 Vi que a {{2}} atua com {{3}}. Trabalhamos com empresas nesse perfil na parte de margem, catálogo, estrutura de operação e, quando faz sentido, importação direta.
 
@@ -64,7 +64,7 @@ Exemplos: `{{1}}` = `boa tarde` · `{{2}}` = `Teka` · `{{3}}` = `cama, mesa e b
 
 ### `abordagem_industria_v2` · Marketing · Português (BR)
 ```
-Olá, {{1}}. Aqui é o consultor comercial do Iago Rodrigues.
+Olá, {{1}}. Aqui é o Rafael, consultor comercial do Iago Rodrigues.
 
 Ele trabalha com indústrias e distribuidores em duas frentes: estruturação da operação em marketplace (catálogo, margem, estoque, logística) e importação — do diagnóstico de viabilidade até o acompanhamento da operação completa.
 
