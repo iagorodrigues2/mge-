@@ -24,7 +24,23 @@ function Numero({ valor, label, hint }: { valor: string | number; label: string;
 export default async function MetricasPage({ searchParams }: { searchParams: Promise<{ dias?: string }> }) {
   const { dias } = await searchParams;
   const periodo = dias === "0" ? null : Number(dias ?? 30);
-  const m = calcularMetricas(await listLeads(), periodo);
+
+  // Se algum registro torto derrubar o cálculo, a tela diz O QUE quebrou em vez
+  // de "server-side exception" — sem acesso ao log da Vercel, é a única pista.
+  let m;
+  try {
+    m = calcularMetricas(await listLeads(), periodo);
+  } catch (e) {
+    return (
+      <main>
+        <h1>Métricas</h1>
+        <div className="notice">
+          <b>Não consegui calcular.</b> Erro: <code>{(e as Error).message}</code>
+          <div className="hint" style={{ marginTop: 6 }}>Mande esta mensagem para corrigir o registro que está fora do formato.</div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main>

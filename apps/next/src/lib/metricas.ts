@@ -49,13 +49,14 @@ function dentroDoPeriodo(iso: string | undefined, desde: number | null): boolean
 // frágil: ele muda por outros motivos (nutrir, não abordar) e apagaria o fato
 // de que a mensagem foi enviada.
 function foiContatado(l: Lead, desde: number | null): boolean {
-  return (l.attempts ?? []).some(
+  if (!Array.isArray(l.attempts)) return false;
+  return l.attempts.some(
     (a) => a.step === "contato_inicial" && (a.status === "enviado" || a.status === "assistido") && dentroDoPeriodo(a.at, desde),
   );
 }
 
 function respondeu(l: Lead): boolean {
-  return (l.conversation ?? []).some((c) => c.role === "lead");
+  return Array.isArray(l.conversation) && l.conversation.some((c) => c && c.role === "lead");
 }
 
 function vazio(origem: string): Funil {
@@ -72,7 +73,7 @@ function acumular(f: Funil, l: Lead, desde: number | null): void {
   if (l.reuniao) f.reunioes += 1;
   if (l.stage === "ganho") f.ganhos += 1;
   if (l.opt_out) f.optOuts += 1;
-  if (l.handoff_reason?.startsWith("sem fit")) f.semFit += 1;
+  if (typeof l.handoff_reason === "string" && l.handoff_reason.startsWith("sem fit")) f.semFit += 1;
 }
 
 function fecharTaxas(f: Funil): Funil {
@@ -102,23 +103,27 @@ export function calcularMetricas(leads: Lead[], periodoDias: number | null = 30)
   let enviadas = 0, bloqueadas = 0, respostasIa = 0;
   const ultimos: Metricas["ultimos"] = [];
   for (const l of leads) {
-    for (const a of l.attempts ?? []) {
-      if (!dentroDoPeriodo(a.at, desde)) continue;
+    for (const a of Array.isArray(l.attempts) ? l.attempts : []) {
+      if (!a || !dentroDoPeriodo(a.at, desde)) continue;
       if (a.status === "enviado") enviadas += 1;
       if (a.status === "bloqueado") bloqueadas += 1;
       if (a.step === "resposta_ia") respostasIa += 1;
     }
-    const ultima = (l.conversation ?? [])[(l.conversation ?? []).length - 1];
+    // Dados de produção têm lead antigo com mensagem sem `at` ou sem `text`
+    // (era o que derrubava a página inteira com "server-side exception").
+    // Métrica que quebra por um registro torto não serve pra nada.
+    const conv = Array.isArray(l.conversation) ? l.conversation : [];
+    const ultima = conv[conv.length - 1];
     if (ultima) {
       ultimos.push({
-        empresa: l.empresa + (l.teste ? " (teste)" : ""),
+        empresa: String(l.empresa ?? l.id) + (l.teste ? " (teste)" : ""),
         origem: l.source || "—",
-        quando: ultima.at,
-        oQue: `${ultima.role === "lead" ? "lead" : "Rafael"}: ${ultima.text.slice(0, 80)}`,
+        quando: typeof ultima.at === "string" ? ultima.at : "",
+        oQue: `${ultima.role === "lead" ? "lead" : "Rafael"}: ${String(ultima.text ?? "").slice(0, 80)}`,
       });
     }
   }
-  ultimos.sort((a, b) => b.quando.localeCompare(a.quando));
+  ultimos.sort((a, b) => (b.quando || "").localeCompare(a.quando || ""));
 
   const comWhatsapp = reais.filter((l) => l.whatsapp).length;
   const aprovaveis = reais.filter((l) => l.score?.potential === "A" || l.score?.potential === "B").length;
