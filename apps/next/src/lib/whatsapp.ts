@@ -101,6 +101,30 @@ export async function sendTemplate(
   }
 }
 
+// Marca a mensagem do lead como lida e acende o "digitando…". Sem o segundo
+// check azul e sem os três pontinhos, a resposta parece disparo; com eles, o
+// lead vê alguém lendo e escrevendo. Best-effort: se a Meta recusar (ou a
+// versão da API não suportar), a conversa segue igual.
+export async function marcarLidoEDigitando(messageId: string): Promise<void> {
+  const token = process.env.WHATSAPP_BUSINESS_TOKEN;
+  const phoneId = process.env.WHATSAPP_BUSINESS_PHONE_ID;
+  if (!token || !phoneId || !messageId) return;
+  try {
+    await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    });
+  } catch {
+    // silencioso de propósito
+  }
+}
+
 export function whatsappConfigurado(): boolean {
   return !!process.env.WHATSAPP_BUSINESS_TOKEN && !!process.env.WHATSAPP_BUSINESS_PHONE_ID;
 }

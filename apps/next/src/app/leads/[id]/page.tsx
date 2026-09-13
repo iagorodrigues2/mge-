@@ -96,6 +96,17 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
           ) : (
             <p className="hint">Lead fora da cadência ativa (ainda não contatado, respondeu, ou opt-out).</p>
           )}
+          {lead.reuniao && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+              <p className="hint" style={{ margin: "0 0 6px" }}>
+                📅 Reunião: <b>{lead.reuniao.rotulo}</b>
+                {lead.reuniao.meet ? <> · <a href={lead.reuniao.meet} target="_blank" rel="noreferrer">link do Meet</a></> : " · sem link"}
+                {lead.reuniao.avisoLeadEnviado ? " · lead avisado" : " · lead NÃO avisado"}
+              </p>
+              <PostButton url={`/api/leads/${id}/reenviar-confirmacao`} label="Reenviar confirmação + link (e-mail e WhatsApp)"
+                successText="Confirmação reenviada" />
+            </div>
+          )}
           {lead.stage === "novo" || lead.stage === "pesquisado" || lead.stage === "aprovado" ? (
             (lead.score?.potential === "A" || lead.score?.potential === "B") && (
               <div style={{ marginTop: 10 }}>

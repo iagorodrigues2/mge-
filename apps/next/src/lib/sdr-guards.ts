@@ -210,12 +210,16 @@ const PERGUNTA_COMERCIAL = new RegExp(
     "quanto custa", "quanto (fica|sai|custa|é|seria)", "quanto voc[êe]s? cobram",
     "qual (o |é o )?(valor|pre[çc]o|investimento|custo)", "pre[çc]o", "or[çc]amento",
     "investimento", "t[áa] caro", "est[áa] caro", "cabe no meu or[çc]amento",
-    // produto / formato / contratação — pedido comercial mesmo sem falar em R$
-    "(quais|que|quero saber d?os?|me (fala|explica|diz) d?os?|conhecer os?|ver os?) ?(seus |os )?(planos?|programas?|formatos?|pacotes?|servi[çc]os?)",
-    "planos? de", "programas? de", "op[çc][õo]es de (plano|programa|acompanhamento|contrata)",
-    "acompanhamento", "mentoria", "consultoria mensal",
+    // produto / serviço / formato — qualquer menção ao QUE se vende já é comercial.
+    // Segunda vez que este guard derruba uma conversa boa: "gostaria de saber
+    // mais sobre os produtos" era bloqueado porque só "planos" e "programas"
+    // estavam na lista. Régua nova: só é NEUTRO o pedido genérico sem objeto.
+    "produtos?", "servi[çc]os?", "planos?", "programas?", "formatos?", "pacotes?",
+    "cat[áa]logo", "portf[óo]lio", "op[çc][õo]es", "solu[çc][õo]es",
+    "o que (voc[êe]s? |ele |o iago )?(faz|fazem|oferece|oferecem|vende|vendem|entrega|entregam)",
+    "como (voc[êe]s? |ele )?(trabalha|trabalham|atua|atuam|funciona)",
+    "acompanhamento", "mentoria", "consultoria", "diagn[óo]stico", "implanta[çc][ãa]o",
     "(quero|queria|preciso|gostaria de) (contratar|fechar|assinar)",
-    "como (funciona a|é a|faço pra) contrata",
     "per[íi]odo (maior|mais longo)", "prazo mais longo", "mais de perto",
   ].join("|"),
   "i",
@@ -370,7 +374,11 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   // responder direito o que foi perguntado.
   const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh/i.test(ctx.incoming)
     || PERGUNTA_COMERCIAL.test(ctx.incoming);
-  if (!pediuDetalhe && reply.length > 700) v.push(`§2: mensagem longa (${reply.length} caracteres) — prefira curta a média`);
+  // WhatsApp é conversa, não e-mail. Fora de pedido explícito de catálogo ou
+  // detalhe, acima de ~450 caracteres vira parede — e parede de texto em 3
+  // segundos é o segundo maior sinal de robô, depois da velocidade.
+  const limite = pediuDetalhe ? 1300 : 450;
+  if (reply.length > limite) v.push(`§2: mensagem longa (${reply.length}/${limite} caracteres) — ${pediuDetalhe ? "mesmo com pedido de detalhe, corte o que não responde à pergunta" : "prefira curta; detalhe só quando ele pedir"}`);
 
   return { ok: v.length === 0, violacoes: v, bloqueiaEnvio: bloqueia };
 }

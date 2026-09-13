@@ -8,6 +8,7 @@ import {
   comentarioMereceResposta, enviarDM, perfilDoUsuario,
   responderComentarioNoPrivado, responderComentarioPublico,
 } from "@/lib/instagram";
+import { dormir, planejarBaloes } from "@/lib/ritmo";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -97,11 +98,22 @@ async function conversar(lead: Lead, texto: string, origem: string): Promise<str
 
   let envio = "sem resposta";
   if (turn.reply && lead.instagram_id) {
-    const r = await enviarDM(lead.instagram_id, turn.reply);
-    envio = r.status;
+    // Mesmo ritmo humano do WhatsApp: espera proporcional e até 3 balões.
+    const baloes = planejarBaloes(turn.reply);
+    const resultados: string[] = [];
+    let algumEnviado = false;
+    for (const b of baloes) {
+      await dormir(b.esperaMs);
+      const r = await enviarDM(lead.instagram_id, b.texto);
+      resultados.push(r.status === "enviado" ? "✓" : `✗ ${r.detail}`);
+      if (r.status === "enviado") algumEnviado = true;
+      else if (!algumEnviado) break;
+    }
+    envio = algumEnviado ? "enviado" : "bloqueado";
     lead.attempts = [...(lead.attempts ?? []), {
       step: "resposta_ia", channel: "instagram", message: turn.reply,
-      status: r.status === "enviado" ? "enviado" : "bloqueado", detail: r.detail, at: agora,
+      status: algumEnviado ? "enviado" : "bloqueado",
+      detail: `${baloes.length} balão(ões): ${resultados.join(" · ")}`, at: agora,
     }];
   }
 

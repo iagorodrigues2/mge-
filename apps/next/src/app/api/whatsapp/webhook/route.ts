@@ -4,7 +4,8 @@ import { addOptOut, listLeads, upsertLead } from "@/lib/db";
 import { applySdrTurn, notificarPorteiro, responderPendenciaIago, sdrRespond } from "@/lib/ai-sdr";
 import { avisarLeadDaReuniao } from "@/lib/reuniao";
 import { pediuParaParar } from "@/lib/sdr-guards";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { marcarLidoEDigitando, sendWhatsApp } from "@/lib/whatsapp";
+import { dormir, planejarBaloes } from "@/lib/ritmo";
 import { normalizarRemetenteBR } from "@/lib/whatsapp-finder";
 import type { Lead } from "@/lib/types";
 
@@ -217,16 +218,35 @@ export async function POST(req: Request) {
           let envio: string | undefined;
           if (turn.reply) {
             const destino = lead.whatsapp && lead.whatsapp.length >= 13 ? lead.whatsapp : from;
-            const wa = await sendWhatsApp(destino, turn.reply);
-            envio = wa.status;
+
+            // RITMO HUMANO. Resposta de 600 caracteres em 3 segundos entrega o
+            // robô antes de qualquer palavra. Marca como lida, acende o
+            // "digitando…", espera proporcional ao tamanho e manda em até 3
+            // balões — como alguém que lê, pensa e escreve.
+            const baloes = planejarBaloes(turn.reply);
+            const resultados: string[] = [];
+            let algumEnviado = false;
+            let algumBloqueado = false;
+            for (let i = 0; i < baloes.length; i++) {
+              if (i === 0 && m.id) await marcarLidoEDigitando(m.id);
+              await dormir(baloes[i].esperaMs);
+              const wa = await sendWhatsApp(destino, baloes[i].texto);
+              resultados.push(wa.status === "enviado" ? "✓" : `✗ ${wa.detail}`);
+              if (wa.status === "enviado") algumEnviado = true;
+              else algumBloqueado = true;
+              // A Meta pode recusar o segundo balão se o primeiro falhou por
+              // janela fechada — não insistir.
+              if (!algumEnviado && algumBloqueado) break;
+            }
+            envio = algumEnviado ? "enviado" : "bloqueado";
             lead.attempts = [
               ...(lead.attempts ?? []),
               {
                 step: "resposta_ia",
                 channel: "whatsapp",
                 message: turn.reply,
-                status: wa.status === "enviado" ? "enviado" : "bloqueado",
-                detail: wa.detail,
+                status: algumEnviado ? "enviado" : "bloqueado",
+                detail: `${baloes.length} balão(ões): ${resultados.join(" · ")}`,
                 at: new Date().toISOString(),
               },
             ];
