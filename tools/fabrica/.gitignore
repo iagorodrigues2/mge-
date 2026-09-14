@@ -12,3 +12,7 @@ base/
 __pycache__/
 MuseTalk/
 *.pkl
+LatentSync/
+*.jpg
+*.pid
+gera_voz.py

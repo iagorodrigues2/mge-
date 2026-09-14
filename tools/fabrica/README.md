@@ -26,3 +26,15 @@ source .venv/bin/activate
 python reel.py tudo roteiros/01-taxa.txt      # → saida/01-taxa/reel_final.mp4
 ```
 Tempo no M4 16GB: ~2 min de voz + ~10 min de lip-sync por reel de 45s. Roda em lote de madrugada.
+
+## Nuvem (GPU grátis) — o caminho de produção
+O LatentSync (boca em 512 px, a versão nítida) não cabe na memória do Mac. Roda em GPU T4 grátis:
+```bash
+python3 gerar_notebook.py        # → fabrica_reels.ipynb (auto-suficiente: embute montagem.py, tts.py e o detector patchado)
+```
+Abrir o `.ipynb` no Google Colab (Runtime → T4 GPU) ou Kaggle. Entrada no Drive/Dataset `fabrica/`:
+`voz_ref.wav` (ou `voz_ref.mp4`), `base/*.mp4`, `roteiros/*.txt`. Saída em `fabrica/saida/<roteiro>/reel_final.mp4`.
+Um clique ("Run all") por lote; reels já feitos são pulados.
+
+Arquivos compartilhados Mac ↔ nuvem: `montagem.py` (legenda + 9:16), `tts.py` (voz), `latentsync_face_detector.py`
+(troca o insightface — não comercial — pela face_alignment, BSD).
