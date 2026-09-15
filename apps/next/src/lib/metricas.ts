@@ -36,7 +36,7 @@ export interface Metricas {
     prontosParaDisparo: number; // A/B + WhatsApp + ainda não contatados
   };
   mensagens: { enviadas: number; bloqueadas: number; respostasIa: number };
-  ultimos: { empresa: string; origem: string; quando: string; oQue: string }[];
+  ultimos: { id: string; empresa: string; origem: string; quando: string; oQue: string; total: number }[];
 }
 
 function dentroDoPeriodo(iso: string | undefined, desde: number | null): boolean {
@@ -116,6 +116,8 @@ export function calcularMetricas(leads: Lead[], periodoDias: number | null = 30)
     const ultima = conv[conv.length - 1];
     if (ultima) {
       ultimos.push({
+        id: l.id,
+        total: conv.length,
         empresa: String(l.empresa ?? l.id) + (l.teste ? " (teste)" : ""),
         origem: l.source || "—",
         quando: typeof ultima.at === "string" ? ultima.at : "",

@@ -135,7 +135,9 @@ export default async function MetricasPage({ searchParams }: { searchParams: Pro
         {m.ultimos.length === 0 && <p className="hint">nenhuma conversa ainda</p>}
         {m.ultimos.map((u, i) => (
           <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-            <b>{u.empresa}</b> <span className="hint">· {u.origem} · {dataHora(u.quando)}</span>
+            <b><Link href={`/leads/${u.id}#conversa`}>{u.empresa}</Link></b>{" "}
+            <span className="hint">· {u.origem} · {dataHora(u.quando)} · {u.total} msg</span>{" "}
+            <Link href={`/leads/${u.id}#conversa`} className="hint">ver conversa →</Link>
             <div className="sub">{u.oQue}</div>
           </div>
         ))}

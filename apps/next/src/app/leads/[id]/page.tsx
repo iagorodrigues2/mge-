@@ -175,7 +175,7 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
 
       {!!lead.conversation?.length && (
         <>
-          <h2>Conversa com a IA Vendedor ({lead.conversation.length})</h2>
+          <h2 id="conversa">Conversa com a IA Vendedor ({lead.conversation.length})</h2>
           <div className="panel">
             {lead.sdr && (
               <p className="hint" style={{ marginBottom: 10 }}>
@@ -184,12 +184,21 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
                 {lead.sdr.score && <> · Interesse: <b>{lead.sdr.score.interesse}</b></>}
               </p>
             )}
-            {lead.conversation.map((c, i) => (
-              <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
-                <div className="hint"><b>{c.role === "lead" ? "LEAD" : "IA"}</b> · {dataHora(c.at)}</div>
-                <div className="msg">{c.text}</div>
-              </div>
-            ))}
+            {/* formato de chat: lead à esquerda, Rafael à direita — dá pra ler
+                a conversa inteira de cima a baixo como no celular */}
+            {lead.conversation.map((c, i) => {
+              const doLead = c.role === "lead";
+              return (
+                <div key={i} style={{ display: "flex", justifyContent: doLead ? "flex-start" : "flex-end", padding: "4px 0" }}>
+                  <div style={{ maxWidth: "78%", background: doLead ? "var(--panel-2)" : "#1f4d3a", borderRadius: 12, padding: "8px 12px" }}>
+                    <div className="hint" style={{ marginBottom: 2 }}>
+                      <b>{doLead ? (lead.contato_nome || lead.empresa) : "Rafael"}</b> · {dataHora(c.at)}
+                    </div>
+                    <div className="msg" style={{ whiteSpace: "pre-wrap" }}>{c.text}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
