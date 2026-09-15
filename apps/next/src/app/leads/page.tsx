@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
+import ImportarLoteButton from "@/components/ImportarLoteButton";
+import { LOTES } from "@/lotes";
 import DispatchBatchButton from "@/components/DispatchBatchButton";
 import NovoLeadForm from "@/components/NovoLeadForm";
 import FindWhatsappButton from "@/components/FindWhatsappButton";
@@ -42,6 +44,7 @@ export default async function LeadsPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
             <NovoLeadForm />
             <QualifyButton />
+            {(() => { const k = Object.keys(LOTES).sort().at(-1); return k ? <ImportarLoteButton lote={k} total={LOTES[k].length} /> : null; })()}
             <BatchEnrichButton />
             <FindWhatsappButton />
             <DispatchBatchButton />

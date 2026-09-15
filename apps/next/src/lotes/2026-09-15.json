@@ -1,0 +1,125 @@
+{
+ "gerado_em": "2026-09-15",
+ "leads": [
+  {
+   "empresa": "Brisa Enxovais",
+   "website": "https://brisaenxovais.com.br",
+   "segmento": "Cama, mesa e banho",
+   "cidade": "VILA MARIA",
+   "uf": "RS",
+   "whatsapp": "5554992703170",
+   "whatsapp_fonte": "wa.me — https://brisaenxovais.com.br",
+   "cnpj": "08641829000185",
+   "_score_local": 92,
+   "_obs": "Fabricante CMB (RS). ML/Shopee só via revendedores — sem loja oficial."
+  },
+  {
+   "empresa": "Inplast",
+   "website": "https://inplast.com.br",
+   "segmento": "Utilidades domésticas",
+   "cidade": "PEDREIRA",
+   "uf": "SP",
+   "whatsapp": "5519984240666",
+   "whatsapp_fonte": "api.whatsapp — https://inplast.com.br",
+   "cnpj": "46409975000179",
+   "_score_local": 94,
+   "_obs": "Indústria UD plástico, 53 anos, vende só por representantes. Sem marketplace."
+  },
+  {
+   "empresa": "PlastiBrasil",
+   "website": "https://plastibrasil.ind.br",
+   "segmento": "Utilidades domésticas",
+   "cidade": "UNIAO DA VITORIA",
+   "uf": "PR",
+   "whatsapp": "5542999210539",
+   "whatsapp_fonte": "wa.me — https://plastibrasil.ind.br",
+   "cnpj": "00199301000196",
+   "_score_local": 94,
+   "_obs": "Indústria UD plástico (PR), loja própria. Sem loja oficial em marketplace."
+  },
+  {
+   "empresa": "Cava e Cava Metalúrgica",
+   "website": "https://cavaecava.com.br",
+   "segmento": "Panelas e utensílios",
+   "cidade": "IBIRAMA",
+   "uf": "SC",
+   "whatsapp": "5547996935844",
+   "whatsapp_fonte": "api.whatsapp — https://cavaecava.com.br",
+   "cnpj": "73217028000159",
+   "_score_local": 92,
+   "_obs": "Fábrica de panelas (SC), 33 anos. Aparece no ML por revendedores."
+  },
+  {
+   "empresa": "Têxtil Arte",
+   "website": "https://textilarte.com.br",
+   "segmento": "Tapetes e decoração",
+   "cidade": "POMERODE",
+   "uf": "SC",
+   "whatsapp": "5547991222670",
+   "whatsapp_fonte": "api.whatsapp — https://textilarte.com.br/contato",
+   "cnpj": "04723370000108",
+   "_score_local": 89,
+   "_obs": "Atacadista/fábrica tapetes e toalhas (SC), porte grande. Sem loja oficial."
+  },
+  {
+   "empresa": "Meo Móveis",
+   "website": "https://meomoveis.com.br",
+   "segmento": "Móveis e decoração",
+   "cidade": null,
+   "uf": null,
+   "whatsapp": "5532998171101",
+   "whatsapp_fonte": "texto — https://meomoveis.com.br",
+   "cnpj": null,
+   "_score_local": 71,
+   "_obs": "Fábrica de móveis, 70 anos, +1000 variações. CNPJ não achado — enriquecer em prod."
+  },
+  {
+   "empresa": "Joelma Decorações",
+   "website": "https://joelmadecoracoes.com.br",
+   "segmento": "Objetos de decoração",
+   "cidade": "PORTO FERREIRA",
+   "uf": "SP",
+   "whatsapp": "5519997235392",
+   "whatsapp_fonte": "wa.me — https://joelmadecoracoes.com.br",
+   "cnpj": "07564854000140",
+   "_score_local": 92,
+   "_obs": "Fabricante decoração, 50 anos. JÁ TEM loja oficial ML (3k seguidores) → pitch \"escalar/execução\"."
+  },
+  {
+   "empresa": "Alumínios Ceará",
+   "website": "https://aluminiosceara.com.br",
+   "segmento": "Panelas e utensílios",
+   "cidade": "DIVINOPOLIS",
+   "uf": "MG",
+   "whatsapp": "5537988287595",
+   "whatsapp_fonte": "api.whatsapp — https://aluminiosceara.com.br",
+   "cnpj": "27937828000127",
+   "_score_local": 86,
+   "_obs": "Fábrica de panelas (MG). JÁ TEM loja no ML → pitch \"execução\"."
+  },
+  {
+   "empresa": "BARRO Cerâmica",
+   "website": "https://ceramicabarro.com.br",
+   "segmento": "Objetos de decoração",
+   "cidade": "SAO PAULO",
+   "uf": "SP",
+   "whatsapp": "5561996459965",
+   "whatsapp_fonte": "texto — https://ceramicabarro.com.br",
+   "cnpj": "34979118000125",
+   "_score_local": 77,
+   "_obs": "Fabricante cerâmica, ME, 7 anos. Sem marketplace. Menor porte."
+  },
+  {
+   "empresa": "Dach Toalhas",
+   "website": "https://dachtoalhas.com.br",
+   "segmento": "Cama, mesa e banho",
+   "cidade": "BRUSQUE",
+   "uf": "SC",
+   "whatsapp": "5547999001724",
+   "whatsapp_fonte": "api.whatsapp — https://dachtoalhas.com.br",
+   "cnpj": "26105750000111",
+   "_score_local": 77,
+   "_obs": "Brusque, CNAE varejo (pode ser revenda). Sem marketplace."
+  }
+ ]
+}
