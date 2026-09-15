@@ -24,7 +24,9 @@ function lastAttempt(l: Lead) {
 }
 
 export default async function LeadsPage() {
-  const leads = await listLeads();
+  // mais recentes primeiro: lote importado agora aparece no topo, não perdido
+  // no meio de 600 linhas
+  const leads = (await listLeads()).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   const abordaveis = leads.filter((l) => l.score?.potential === "A" || l.score?.potential === "B");
   const enriquecidos = leads.filter((l) => l.enriched_at).length;
   // sem celular não existe outbound: o telefone da Receita é PABX fixo
@@ -85,6 +87,7 @@ export default async function LeadsPage() {
                     <td>
                       {l.segmento}
                       <div className="stage">{[l.cidade, l.uf].filter(Boolean).join("/")}</div>
+                      {!l.score && <div className="stage" style={{ color: "var(--warn)" }}>novo · ainda não qualificado</div>}
                     </td>
                     <td>
                       <span className="score">{l.score?.total ?? "—"}</span>
