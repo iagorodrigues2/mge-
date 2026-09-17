@@ -3,6 +3,7 @@ import { listLeads } from "@/lib/db";
 import ApproveButton from "@/components/ApproveButton";
 import BatchEnrichButton from "@/components/BatchEnrichButton";
 import ImportarLoteButton from "@/components/ImportarLoteButton";
+import RetomarIaButton from "@/components/RetomarIaButton";
 import { LOTES } from "@/lotes";
 import DispatchBatchButton from "@/components/DispatchBatchButton";
 import NovoLeadForm from "@/components/NovoLeadForm";
@@ -50,6 +51,7 @@ export default async function LeadsPage() {
             <BatchEnrichButton />
             <FindWhatsappButton />
             <DispatchBatchButton />
+            <RetomarIaButton />
           </div>
         )}
       </div>
