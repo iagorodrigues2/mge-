@@ -213,6 +213,11 @@ export default async function LeadDetail({ params }: { params: Promise<{ id: str
               {a.status === "assistido" && a.detail?.startsWith("http") && <> · <a className="wa" href={a.detail} target="_blank" rel="noreferrer">abrir WhatsApp ↗</a></>}
             </div>
             <div className="msg">{a.message}</div>
+            {/* bloqueio sem motivo visível é o que esconde IA sem crédito, template
+                reprovado, número inválido — o operador precisa ler o porquê */}
+            {a.status === "bloqueado" && a.detail && (
+              <div className="hint" style={{ color: "var(--danger)", marginTop: 4 }}>motivo: {a.detail}</div>
+            )}
           </div>
         ))}
       </div>
