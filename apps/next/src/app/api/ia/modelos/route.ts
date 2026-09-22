@@ -16,9 +16,7 @@ export const maxDuration = 60;
 const CANDIDATOS = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash-lite",
-  "gemini-2.0-flash",
+  "gemini-3.5-flash",
   "gemini-3.6-flash",
 ];
 
@@ -33,29 +31,48 @@ export async function GET() {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return NextResponse.json({ ok: false, error: "GEMINI_API_KEY não configurada" }, { status: 400 });
 
+  // Uma chamada minúscula, mas VÁLIDA. A primeira versão mandava
+  // maxOutputTokens:1 + thinkingConfig e levava "invalid argument" de modelos
+  // que na verdade estavam disponíveis — o diagnóstico acusava o modelo por um
+  // defeito da sonda.
+  async function bater(modelo: string, comThinking: boolean) {
+    const generationConfig: Record<string, unknown> = { maxOutputTokens: 16 };
+    if (comThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "diga ok" }] }], generationConfig }),
+      },
+    );
+    const d = (await r.json().catch(() => ({}))) as { error?: { message?: string } };
+    return { ok: r.ok && !d.error, msg: d.error?.message ?? String(r.status) };
+  }
+
+  const esperar = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
   const resultados: Resultado[] = [];
+
   for (const modelo of CANDIDATOS) {
     try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "oi" }] }],
-            generationConfig: { maxOutputTokens: 1, thinkingConfig: { thinkingBudget: 0 } },
-          }),
-        },
-      );
-      const d = (await r.json().catch(() => ({}))) as { error?: { message?: string } };
-      if (r.ok && !d.error) {
+      // thinkingConfig não existe em todo modelo; se ele reclamar, tenta sem.
+      let t = await bater(modelo, true);
+      if (!t.ok && /invalid argument|thinking|unknown name/i.test(t.msg)) {
+        t = await bater(modelo, false);
+      }
+      // Congestão é passageira — uma segunda chance evita descartar um modelo bom.
+      if (!t.ok && /high demand|overload|unavailable|503/i.test(t.msg)) {
+        await esperar(1500);
+        t = await bater(modelo, false);
+      }
+
+      if (t.ok) {
         resultados.push({ modelo, ok: true });
         continue;
       }
-      const msg = d.error?.message ?? String(r.status);
       // "Quota exceeded for metric: ... limit: 20, model: X"
-      const limite = /limit:\s*(\d+)/i.exec(msg)?.[1];
-      resultados.push({ modelo, ok: false, limiteDeclarado: limite ? Number(limite) : null, erro: msg.slice(0, 180) });
+      const limite = /limit:\s*(\d+)/i.exec(t.msg)?.[1];
+      resultados.push({ modelo, ok: false, limiteDeclarado: limite ? Number(limite) : null, erro: t.msg.slice(0, 180) });
     } catch (e) {
       resultados.push({ modelo, ok: false, erro: (e as Error).message });
     }
