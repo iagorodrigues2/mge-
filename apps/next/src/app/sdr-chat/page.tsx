@@ -21,6 +21,7 @@ interface Turn {
   action?: SdrAction;
   motivo?: string;
   ms?: number;
+  violacoes?: string[];
 }
 
 export default function SdrChatPage() {
@@ -62,7 +63,7 @@ export default function SdrChatPage() {
       const iaMsg: ConversationMsg = { role: "ia", text: data.reply, at: new Date().toISOString() };
       setMsgs((prev) => {
         const next = [...prev, iaMsg];
-        setMeta((m) => ({ ...m, [next.length - 1]: { action: data.action, motivo: data.motivo, ms: data.ms } }));
+        setMeta((m) => ({ ...m, [next.length - 1]: { action: data.action, motivo: data.motivo, ms: data.ms, violacoes: data.violacoes } }));
         return next;
       });
     } catch (e) {
@@ -149,6 +150,13 @@ export default function SdrChatPage() {
                     </span>
                   )}
                   {meta[i]?.motivo && <span className="hint" style={{ marginLeft: 8 }}>🧠 {meta[i].motivo}</span>}
+                  {/* Sem isto, resposta bloqueada aparecia como "a IA respondeu mal" —
+                      quando na verdade ela respondeu bem e um guard derrubou. */}
+                  {meta[i]?.violacoes?.length ? (
+                    <div className="msg err" style={{ marginTop: 6, fontSize: 12 }}>
+                      🛑 guard bloqueou a resposta original: {meta[i].violacoes!.join(" · ")}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>

@@ -204,26 +204,32 @@ function percentuaisCitados(reply: string): number[] {
 //
 // A régua certa: perguntou por VALOR, ou por PRODUTO/FORMATO/CONTRATAÇÃO.
 // "Gostaria de mais informações" continua de fora, que era o caso original.
-const PERGUNTA_COMERCIAL = new RegExp(
-  [
-    // valor
-    "quanto custa", "quanto (fica|sai|custa|é|seria)", "quanto voc[êe]s? cobram",
-    "qual (o |é o )?(valor|pre[çc]o|investimento|custo)", "pre[çc]o", "or[çc]amento",
-    "investimento", "t[áa] caro", "est[áa] caro", "cabe no meu or[çc]amento",
-    // produto / serviço / formato — qualquer menção ao QUE se vende já é comercial.
-    // Segunda vez que este guard derruba uma conversa boa: "gostaria de saber
-    // mais sobre os produtos" era bloqueado porque só "planos" e "programas"
-    // estavam na lista. Régua nova: só é NEUTRO o pedido genérico sem objeto.
-    "produtos?", "servi[çc]os?", "planos?", "programas?", "formatos?", "pacotes?",
-    "cat[áa]logo", "portf[óo]lio", "op[çc][õo]es", "solu[çc][õo]es",
-    "o que (voc[êe]s? |ele |o iago )?(faz|fazem|oferece|oferecem|vende|vendem|entrega|entregam)",
-    "como (voc[êe]s? |ele )?(trabalha|trabalham|atua|atuam|funciona)",
-    "acompanhamento", "mentoria", "consultoria", "diagn[óo]stico", "implanta[çc][ãa]o",
-    "(quero|queria|preciso|gostaria de) (contratar|fechar|assinar)",
-    "per[íi]odo (maior|mais longo)", "prazo mais longo", "mais de perto",
-  ].join("|"),
-  "i",
-);
+// QUANDO CITAR VALOR É PROIBIDO.
+//
+// Quarta reescrita desta regra, e as três primeiras falharam pelo mesmo motivo:
+// eu listava as palavras que LIBERAM ("planos", "programas", "produtos"...) e a
+// lista nunca estava completa. Faltou "planos de acompanhamento", depois
+// "produtos", depois "importar" — e cada falta derrubou uma conversa boa,
+// porque o bloqueio vira a resposta de segurança.
+//
+// Lista de permissão é infinita; lista de proibição é curta e fechada. O caso
+// real que originou o guard foi UM: a primeira mensagem do lead é um "oi" ou um
+// "gostaria de mais informações" sem nenhum conteúdo, e a IA já responde com
+// investimento. Então a regra passa a ser exatamente essa: só bloqueia enquanto
+// TUDO que o lead disse for saudação ou pedido genérico. Qualquer frase com
+// conteúdo — o que ele vende, o que quer, o problema que tem — libera.
+//
+// A nuance (não jogar preço na cara sem necessidade) continua no prompt, que é
+// onde nuance funciona. Guard é para o caso certo, não para o caso sutil.
+const SO_GENERICO =
+  /^[\s\p{P}]*(oi|ol[áa]|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|td bem|blz|beleza|gostaria de (mais )?informa[çc][õo]es|quero (mais )?informa[çc][õo]es|queria (mais )?informa[çc][õo]es|mais informa[çc][õo]es|informa[çc][õo]es|me (manda|envia|passa) (mais )?informa[çc][õo]es|pode (me )?ajudar|preciso de ajuda|[\s\p{P}]*)*$/iu;
+
+function falaComConteudo(texto: string): boolean {
+  const t = (texto ?? "").trim();
+  if (t.length < 3) return false;
+  return !SO_GENERICO.test(t);
+}
+
 
 const TOLERANCIA = 0.05;
 function derivados(base: number[]): number[] {
@@ -335,9 +341,10 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   // conversa (agora ou antes), tiver perguntado por valor/investimento/
   // planos — ver mesmo padrão do script "quais são os programas e preços".
   if (valoresCitados(reply).length > 0) {
-    const leadPediuPreco = [...ctx.historico.filter((m) => m.role === "lead").map((m) => m.text), ctx.incoming].some((t) => PERGUNTA_COMERCIAL.test(t));
+    const falasDoLead = [...ctx.historico.filter((m) => m.role === "lead").map((m) => m.text), ctx.incoming];
+    const leadPediuPreco = falasDoLead.some(falaComConteudo);
     if (!leadPediuPreco) {
-      v.push("preço-não-pedido: citou valor sem o lead ter perguntado preço/investimento/planos — explique o posicionamento e pergunte antes de falar em número");
+      v.push("preço-não-pedido: o lead ainda não disse nada além de saudação — entenda o caso antes de falar em número");
       bloqueia = true;
     }
   }
@@ -372,8 +379,7 @@ export function checarResposta(ctx: GuardContext): GuardResult {
   // Quem pede o catálogo, o escopo ou os formatos merece resposta longa — o
   // limite de tamanho existe contra parede de texto não solicitada, não contra
   // responder direito o que foi perguntado.
-  const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh/i.test(ctx.incoming)
-    || PERGUNTA_COMERCIAL.test(ctx.incoming);
+  const pediuDetalhe = /escopo|proposta|como funciona|quem [ée] (o )?iago|me explica|detalh|produtos?|servi[çc]os?|planos?|programas?|formatos?|pacotes?|cat[áa]logo|op[çc][õo]es/i.test(ctx.incoming);
   // WhatsApp é conversa, não e-mail. Fora de pedido explícito de catálogo ou
   // detalhe, acima de ~450 caracteres vira parede — e parede de texto em 3
   // segundos é o segundo maior sinal de robô, depois da velocidade.
