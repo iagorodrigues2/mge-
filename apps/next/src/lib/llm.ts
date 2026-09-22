@@ -23,7 +23,7 @@ export function activeLlm(): LlmBackend {
 // Modelo em uso, para diagnóstico e para a tela de configurações.
 export function modeloAtivo(): string {
   const b = activeLlm();
-  if (b === "gemini") return process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (b === "gemini") return process.env.GEMINI_MODEL || "gemini-3.6-flash";
   if (b === "anthropic") return process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
   return "—";
 }
@@ -80,9 +80,11 @@ async function callGemini(
   opts: { json?: boolean; maxTokens?: number; cacheSystem?: boolean },
 ): Promise<LlmResult> {
   const key = process.env.GEMINI_API_KEY!;
-  // gemini-2.0-flash (default antigo) foi desligado pela Google em
-  // 01/06/2026 — 2.5-flash é o Flash gratuito estável no momento.
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  // A Google aposenta modelo rápido: 2.0-flash caiu em 01/06/2026 e o
+  // 2.5-flash parou de aceitar conta nova em set/2026 ("no longer available to
+  // new users"). Por isso o default é o atual e GEMINI_MODEL existe — quando
+  // cair de novo, é variável de ambiente, não deploy.
+  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -107,11 +109,27 @@ async function callGemini(
       ...(pensar ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
     },
   };
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+  // thinkingConfig não existe em todos os modelos, e quando não existe a Google
+  // recusa a chamada inteira. Tentar de novo sem ele é melhor que exigir que
+  // alguém descubra isso lendo mensagem de erro.
+  if (!res.ok && !pensar) {
+    const texto = await res.clone().text().catch(() => "");
+    if (/thinking/i.test(texto)) {
+      const semPensamento = { ...body, generationConfig: { ...(body.generationConfig as object), thinkingConfig: undefined } };
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(semPensamento),
+      });
+    }
+  }
+
   const data = (await res.json().catch(() => ({}))) as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
     error?: { message?: string };

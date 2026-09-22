@@ -34,7 +34,7 @@ export async function POST() {
   const diagnostico =
     /invalid x-api-key|authentication|401/.test(erro) ? "chave_invalida"
     : /credit|billing|quota|insufficient/.test(erro) ? "sem_credito"
-    : /not_found|does not exist|model/.test(erro) ? "modelo_invalido"
+    : /not_found|does not exist|no longer available|model/.test(erro) ? "modelo_invalido"
     : /overloaded|529|rate/.test(erro) ? "sobrecarregado"
     : "desconhecido";
 
@@ -46,7 +46,7 @@ export async function POST() {
     sem_credito: ehGemini
       ? "Estourou a cota gratuita do Gemini (por minuto ou por dia). Espere alguns minutos — o tier grátis reseta sozinho."
       : "A chave é válida mas a conta está sem crédito. Adicione saldo em console.anthropic.com → Billing.",
-    modelo_invalido: `O modelo "${modeloAtivo()}" não existe ou não está disponível para essa conta. ${ehGemini ? "Use gemini-2.5-flash." : "Use claude-sonnet-4-6."}`,
+    modelo_invalido: `O modelo "${modeloAtivo()}" não existe ou não está mais disponível para essa conta. ${ehGemini ? "Defina GEMINI_MODEL com o nome que a mensagem do Google sugere (a Google aposenta modelo com frequência)." : "Use claude-sonnet-4-6."} Mensagem original abaixo.`,
     sobrecarregado: "O modelo está temporariamente sobrecarregado (erro 529). É passageiro — tente de novo em instantes.",
     desconhecido: "Erro não reconhecido — veja a mensagem original abaixo.",
   };
