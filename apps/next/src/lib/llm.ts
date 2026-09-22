@@ -44,6 +44,8 @@ export interface LlmResult {
   text: string;
   backend: LlmBackend;
   error?: string;
+  // Respondeu pela Claude porque o Gemini estava sobrecarregado.
+  viaFallback?: boolean;
   // Tokens de cache da chamada (só Anthropic com cacheSystem/mensagem
   // marcada) — útil pra confirmar que o cache está batendo de verdade.
   cache?: { criados: number; lidos: number; semCache: number };
@@ -66,11 +68,40 @@ export async function llmChat(
     return { ok: false, text: "", backend, error: "Nenhuma chave de IA configurada (GEMINI_API_KEY ou ANTHROPIC_API_KEY)." };
   }
   try {
-    if (backend === "gemini") return await callGemini(system, messages, opts);
-    return await callAnthropic(system, messages, opts);
+    if (backend === "anthropic") return await callAnthropic(system, messages, opts);
+
+    // O tier gratuito do Gemini fica sobrecarregado ("high demand", 429, 503).
+    // Numa conversa de verdade isso significa o lead falando e ninguém
+    // respondendo — então vale insistir um pouco antes de desistir.
+    let ultima = await callGemini(system, messages, opts);
+    for (let tentativa = 1; tentativa <= 2 && !ultima.ok && sobrecarregado(ultima.error); tentativa++) {
+      await esperar(tentativa * 1200);
+      ultima = await callGemini(system, messages, opts);
+    }
+    if (ultima.ok || !sobrecarregado(ultima.error)) return ultima;
+
+    // Último recurso: se houver chave da Claude, responder com ela em vez de
+    // deixar o lead no vácuo. É raro, e um turno avulso no Haiku custa centavos
+    // — muito menos que perder a conversa. LLM_FALLBACK=0 desliga.
+    if (process.env.ANTHROPIC_API_KEY && process.env.LLM_FALLBACK !== "0") {
+      const socorro = await callAnthropic(system, messages, {
+        ...opts,
+        modelo: process.env.LLM_FALLBACK_MODEL || "claude-haiku-4-5",
+      });
+      if (socorro.ok) return { ...socorro, viaFallback: true };
+    }
+    return ultima;
   } catch (e) {
     return { ok: false, text: "", backend, error: (e as Error).message };
   }
+}
+
+const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// A Google devolve isso de várias formas: 429, 503, "high demand",
+// "overloaded", RESOURCE_EXHAUSTED. Todas significam "tenta de novo".
+function sobrecarregado(erro?: string): boolean {
+  return /high demand|overload|unavailable|resource_exhausted|rate limit|quota|429|503/i.test(erro ?? "");
 }
 
 // --- Google Gemini (tier gratuito) ---
@@ -152,10 +183,10 @@ async function callGemini(
 async function callAnthropic(
   system: LlmSystem,
   messages: LlmMessage[],
-  opts: { json?: boolean; maxTokens?: number; cacheSystem?: boolean },
+  opts: { json?: boolean; maxTokens?: number; cacheSystem?: boolean; modelo?: string },
 ): Promise<LlmResult> {
   const key = process.env.ANTHROPIC_API_KEY!;
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+  const model = opts.modelo || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
   const cached = typeof system === "string" ? system : system.cached;
   const extra = typeof system === "string" ? "" : (system.extra ?? "");
   const jsonSuffix = opts.json
