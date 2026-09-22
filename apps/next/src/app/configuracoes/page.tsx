@@ -1,5 +1,5 @@
 import { listPackages, activeBackend } from "@/lib/db";
-import { activeLlm } from "@/lib/llm";
+import { activeLlm, modeloAtivo } from "@/lib/llm";
 import { agendaConfigurada } from "@/lib/google-calendar";
 import { instagramConfigurado } from "@/lib/instagram";
 import PriceEditor from "@/components/PriceEditor";
@@ -46,8 +46,8 @@ export default async function ConfiguracoesPage() {
           hint="Defina WHATSAPP_BUSINESS_TOKEN + WHATSAPP_BUSINESS_PHONE_ID. Sem isso, a aprovação gera link wa.me (envio assistido)." />
         <Status on={emailOn} label="E-mail (SMTP)"
           hint="Defina SMTP_HOST/PORT/USER/PASS/FROM. Sem isso, o e-mail vira rascunho." />
-        <Status on={iaOn} label={`Cérebro da IA (agente Vendedor)${iaOn ? ` — ${llm}` : ""}`}
-          hint="Defina ANTHROPIC_API_KEY (e ANTHROPIC_MODEL) nas variáveis de ambiente. Sem isso o agente Vendedor não conversa. Presença da chave ≠ chave válida: use o teste abaixo." />
+        <Status on={iaOn} label={`Cérebro da IA (agente Vendedor)${iaOn ? ` — ${llm} · ${modeloAtivo()}` : ""}`}
+          hint="LLM_BACKEND escolhe o cérebro: gemini (grátis) ou anthropic (pago). Sem ele, usa Claude se houver chave. Presença da chave ≠ chave válida: use o teste abaixo." />
         <Status on={igOn} label="Instagram Direct — o Rafael atende quem chega"
           hint="Defina IG_PAGE_TOKEN + IG_USER_ID e assine o webhook nos campos messages e comments. Canal de ENTRADA: no Instagram não existe template, então ele nunca sai atrás de ninguém." />
         <Status on={agendaOn} label="Agenda (Google Calendar) — o agente marca a reunião sozinho"

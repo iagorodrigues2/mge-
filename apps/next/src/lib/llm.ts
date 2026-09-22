@@ -5,12 +5,27 @@
 
 export type LlmBackend = "gemini" | "anthropic" | "none";
 
+// LLM_BACKEND manda em tudo: "gemini" ou "anthropic". Existe porque a escolha
+// por presença de chave obrigava a APAGAR a chave da Claude para usar o Gemini —
+// e chave apagada na Vercel não volta (é write-only). Com o interruptor, as duas
+// chaves ficam guardadas e a troca é uma variável, nos dois sentidos.
 export function activeLlm(): LlmBackend {
-  // Claude é o cérebro padrão (pago, mais forte). Gemini é o plano B gratuito,
-  // usado só quando não há chave da Claude.
+  const escolhido = (process.env.LLM_BACKEND || "").trim().toLowerCase();
+  if (escolhido === "gemini") return process.env.GEMINI_API_KEY ? "gemini" : "none";
+  if (escolhido === "anthropic") return process.env.ANTHROPIC_API_KEY ? "anthropic" : "none";
+
+  // Sem escolha explícita: o que tiver chave, Claude primeiro (comportamento antigo).
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (process.env.GEMINI_API_KEY) return "gemini";
   return "none";
+}
+
+// Modelo em uso, para diagnóstico e para a tela de configurações.
+export function modeloAtivo(): string {
+  const b = activeLlm();
+  if (b === "gemini") return process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (b === "anthropic") return process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+  return "—";
 }
 
 export interface LlmMessage {
@@ -76,12 +91,20 @@ async function callGemini(
   // Gemini não tem prompt caching neste app ainda — junta tudo (cacheSystem
   // é ignorado aqui, só vale para o backend Anthropic).
   const systemText = typeof system === "string" ? system : `${system.cached}${system.extra ?? ""}`;
+  // ARMADILHA DO 2.5: por padrão ele "pensa" antes de responder, e os tokens de
+  // raciocínio saem do MESMO orçamento de saída. O agente pede 1200 tokens; com
+  // o pensamento comendo boa parte, a resposta chega truncada e o JSON vem
+  // quebrado — o sintoma seria "a IA não respondeu", sem erro nenhum da API.
+  // thinkingBudget 0 desliga. GEMINI_THINKING=1 religa, se um dia valer o custo
+  // de qualidade em troca de latência.
+  const pensar = process.env.GEMINI_THINKING === "1";
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents,
     generationConfig: {
       maxOutputTokens: opts.maxTokens ?? 700,
       ...(opts.json ? { responseMimeType: "application/json" } : {}),
+      ...(pensar ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
     },
   };
   const res = await fetch(url, {
@@ -90,13 +113,20 @@ async function callGemini(
     body: JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
     error?: { message?: string };
   };
   if (!res.ok || data.error) {
     return { ok: false, text: "", backend: "gemini", error: `Gemini: ${data.error?.message ?? res.status}` };
   }
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  // Resposta vazia com HTTP 200 acontece quando o filtro de segurança corta ou
+  // quando o orçamento de saída acabou. Devolver ok:true com texto vazio faria
+  // o agente cair no fallback sem ninguém saber por quê.
+  if (!text.trim()) {
+    const motivo = data.candidates?.[0]?.finishReason ?? "sem texto";
+    return { ok: false, text: "", backend: "gemini", error: `Gemini devolveu resposta vazia (${motivo})` };
+  }
   return { ok: true, text: text.trim(), backend: "gemini" };
 }
 
