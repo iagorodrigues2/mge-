@@ -20,6 +20,7 @@ const INTERESSE_COR: Record<string, string> = { baixo: "var(--muted)", medio: "#
 interface Turn {
   action?: SdrAction;
   motivo?: string;
+  ms?: number;
 }
 
 export default function SdrChatPage() {
@@ -61,7 +62,7 @@ export default function SdrChatPage() {
       const iaMsg: ConversationMsg = { role: "ia", text: data.reply, at: new Date().toISOString() };
       setMsgs((prev) => {
         const next = [...prev, iaMsg];
-        setMeta((m) => ({ ...m, [next.length - 1]: { action: data.action, motivo: data.motivo } }));
+        setMeta((m) => ({ ...m, [next.length - 1]: { action: data.action, motivo: data.motivo, ms: data.ms } }));
         return next;
       });
     } catch (e) {
@@ -142,6 +143,11 @@ export default function SdrChatPage() {
                   <span className="badge" style={{ background: ACTION_INFO[meta[i].action!].color, color: "#04140c" }}>
                     {ACTION_INFO[meta[i].action!].label}
                   </span>
+                  {meta[i]?.ms !== undefined && (
+                    <span className="hint" style={{ marginLeft: 8 }} title="tempo do modelo + guards; no WhatsApp o ritmo humano entra por cima">
+                      ⏱ {(meta[i].ms! / 1000).toFixed(1)}s
+                    </span>
+                  )}
                   {meta[i]?.motivo && <span className="hint" style={{ marginLeft: 8 }}>🧠 {meta[i].motivo}</span>}
                 </div>
               )}

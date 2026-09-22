@@ -99,7 +99,7 @@ async function conversar(lead: Lead, texto: string, origem: string): Promise<str
   let envio = "sem resposta";
   if (turn.reply && lead.instagram_id) {
     // Mesmo ritmo humano do WhatsApp: espera proporcional e até 3 balões.
-    const baloes = planejarBaloes(turn.reply);
+    const baloes = planejarBaloes(turn.reply, { jaGastouMs: turn.ms });
     const resultados: string[] = [];
     let algumEnviado = false;
     for (const b of baloes) {

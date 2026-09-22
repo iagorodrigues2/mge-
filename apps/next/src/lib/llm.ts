@@ -46,6 +46,10 @@ export interface LlmResult {
   error?: string;
   // Respondeu pela Claude porque o Gemini estava sobrecarregado.
   viaFallback?: boolean;
+  // Quanto a chamada demorou, incluindo as tentativas. Medir é o que separa
+  // "está lento" de "está lento por causa disto".
+  ms?: number;
+  tentativas?: number;
   // Tokens de cache da chamada (só Anthropic com cacheSystem/mensagem
   // marcada) — útil pra confirmar que o cache está batendo de verdade.
   cache?: { criados: number; lidos: number; semCache: number };
@@ -73,12 +77,18 @@ export async function llmChat(
     // O tier gratuito do Gemini fica sobrecarregado ("high demand", 429, 503).
     // Numa conversa de verdade isso significa o lead falando e ninguém
     // respondendo — então vale insistir um pouco antes de desistir.
+    const t0 = Date.now();
+    let tentativas = 1;
     let ultima = await callGemini(system, messages, opts);
-    for (let tentativa = 1; tentativa <= 2 && !ultima.ok && sobrecarregado(ultima.error); tentativa++) {
-      await esperar(tentativa * 1200);
+    // Insistir custa TEMPO, e tempo aqui é o lead esperando. Só tenta de novo
+    // enquanto couber no orçamento — estourar o limite da função seria pior
+    // que responder pelo caminho pago.
+    for (let t = 1; t <= 2 && !ultima.ok && sobrecarregado(ultima.error) && Date.now() - t0 < ORCAMENTO_MS; t++) {
+      await esperar(t * 900);
+      tentativas++;
       ultima = await callGemini(system, messages, opts);
     }
-    if (ultima.ok || !sobrecarregado(ultima.error)) return ultima;
+    if (ultima.ok || !sobrecarregado(ultima.error)) return { ...ultima, ms: Date.now() - t0, tentativas };
 
     // Último recurso: se houver chave da Claude, responder com ela em vez de
     // deixar o lead no vácuo. É raro, e um turno avulso no Haiku custa centavos
@@ -88,15 +98,19 @@ export async function llmChat(
         ...opts,
         modelo: process.env.LLM_FALLBACK_MODEL || "claude-haiku-4-5",
       });
-      if (socorro.ok) return { ...socorro, viaFallback: true };
+      if (socorro.ok) return { ...socorro, viaFallback: true, ms: Date.now() - t0, tentativas: tentativas + 1 };
     }
-    return ultima;
+    return { ...ultima, ms: Date.now() - t0, tentativas };
   } catch (e) {
     return { ok: false, text: "", backend, error: (e as Error).message };
   }
 }
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Teto para o conjunto chamada+tentativas. A função da Vercel morre em 60s e o
+// ritmo humano ainda vai consumir tempo depois disto.
+const ORCAMENTO_MS = 20000;
 
 // A Google devolve isso de várias formas: 429, 503, "high demand",
 // "overloaded", RESOURCE_EXHAUSTED. Todas significam "tenta de novo".

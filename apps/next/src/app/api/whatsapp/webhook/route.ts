@@ -223,7 +223,7 @@ export async function POST(req: Request) {
             // robô antes de qualquer palavra. Marca como lida, acende o
             // "digitando…", espera proporcional ao tamanho e manda em até 3
             // balões — como alguém que lê, pensa e escreve.
-            const baloes = planejarBaloes(turn.reply);
+            const baloes = planejarBaloes(turn.reply, { jaGastouMs: turn.ms });
             const resultados: string[] = [];
             let algumEnviado = false;
             let algumBloqueado = false;

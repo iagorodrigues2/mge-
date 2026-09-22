@@ -35,6 +35,7 @@ export interface SdrTurn {
   action: SdrAction; // o que fazer a seguir
   motivo?: string; // por que decidiu isso (para o handoff/log)
   state?: SdrState; // estado do Vendedor depois deste turno
+  ms?: number; // quanto o turno inteiro demorou (IA + guards + agenda)
   reuniao?: ReuniaoMarcada; // call criada no Google Calendar neste turno
   contato?: { nome?: string; email?: string; whatsapp?: string }; // dados que o lead passou neste turno
   violacoes?: string[]; // regras do CLAUDE V3 que a saída bruta feriu
@@ -441,6 +442,7 @@ function parseTurn(raw: string): ParsedTurn {
 // ---- Turno -------------------------------------------------------------------
 
 export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn> {
+  const iniciouEm = Date.now();
   if (activeLlm() === "none") {
     return { ok: false, reply: "", action: "continuar", error: "IA não configurada (defina ANTHROPIC_API_KEY ou GEMINI_API_KEY)." };
   }
@@ -593,6 +595,7 @@ export async function sdrRespond(lead: Lead, incoming: string): Promise<SdrTurn>
 
   return {
     ok: true,
+    ms: Date.now() - iniciouEm,
     reply: parsed.reply,
     action: acaoFinal,
     motivo: montarMotivo(parsed, novoEstado, acaoFinal) + (reuniao ? ` | 📅 reunião criada: ${reuniao.rotulo}` : falhaAgendamento ? ` | ⚠ agendamento falhou: ${falhaAgendamento}` : ""),
