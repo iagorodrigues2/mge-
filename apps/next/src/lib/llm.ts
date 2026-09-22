@@ -83,12 +83,12 @@ export async function llmChat(
     // Insistir custa TEMPO, e tempo aqui é o lead esperando. Só tenta de novo
     // enquanto couber no orçamento — estourar o limite da função seria pior
     // que responder pelo caminho pago.
-    for (let t = 1; t <= 2 && !ultima.ok && sobrecarregado(ultima.error) && Date.now() - t0 < ORCAMENTO_MS; t++) {
+    for (let t = 1; t <= 2 && !ultima.ok && congestionado(ultima.error) && Date.now() - t0 < ORCAMENTO_MS; t++) {
       await esperar(t * 900);
       tentativas++;
       ultima = await callGemini(system, messages, opts);
     }
-    if (ultima.ok || !sobrecarregado(ultima.error)) return { ...ultima, ms: Date.now() - t0, tentativas };
+    if (ultima.ok || !vaiPraFallback(ultima.error)) return { ...ultima, ms: Date.now() - t0, tentativas };
 
     // Último recurso: se houver chave da Claude, responder com ela em vez de
     // deixar o lead no vácuo. É raro, e um turno avulso no Haiku custa centavos
@@ -112,10 +112,20 @@ const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // ritmo humano ainda vai consumir tempo depois disto.
 const ORCAMENTO_MS = 20000;
 
-// A Google devolve isso de várias formas: 429, 503, "high demand",
-// "overloaded", RESOURCE_EXHAUSTED. Todas significam "tenta de novo".
-function sobrecarregado(erro?: string): boolean {
-  return /high demand|overload|unavailable|resource_exhausted|rate limit|quota|429|503/i.test(erro ?? "");
+// Congestão passageira: insistir resolve.
+function congestionado(erro?: string): boolean {
+  return /high demand|overload|unavailable|503/i.test(erro ?? "");
+}
+
+// COTA ESTOURADA é outra coisa. O tier gratuito do Gemini dá 20 requisições
+// ("generate_content_free_tier_requests, limit: 20") e elas não voltam em
+// segundos — insistir só queima o que sobrou. Vai direto pro plano B.
+function cotaEstourada(erro?: string): boolean {
+  return /quota|exceeded|resource_exhausted|rate limit|429/i.test(erro ?? "");
+}
+
+function vaiPraFallback(erro?: string): boolean {
+  return congestionado(erro) || cotaEstourada(erro);
 }
 
 // --- Google Gemini (tier gratuito) ---
